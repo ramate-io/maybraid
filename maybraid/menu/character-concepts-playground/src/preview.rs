@@ -7,6 +7,7 @@
 use bevy::ecs::relationship::RelationshipTarget;
 use bevy::prelude::*;
 use bevy::scene::prelude::bsn;
+use bikanwarda_character::BikanwardaActor;
 use character_items::ClothingMesh;
 use characters::{
 	assembly::CharacterPartSlot,
@@ -711,6 +712,14 @@ pub fn sync_preview(
 }
 
 fn spawn_lod_character_preview(commands: &mut Commands, config: &ConceptPreviewConfig) {
+	// Encounter-scale Epiphant preview is Bikanwarda: the skinned Epiphant parts
+	// drawing Liam's painted maps on the re-bound #1589 meshes.
+	if matches!(config.species(), ConceptSpecies::Epiphant)
+		&& (crate::preview_capture::encounter_scale_from_env() - 1.0).abs() > f32::EPSILON
+	{
+		spawn_clothed_character(commands, &BikanwardaActor::default());
+		return;
+	}
 	with_clothed_recipe!(config, recipe => {
 		spawn_clothed_character(commands, &recipe);
 	});

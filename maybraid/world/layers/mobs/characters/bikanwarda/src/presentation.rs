@@ -1,4 +1,8 @@
-//! Form-specific material intent (placeholder until tattoo lane #1231).
+//! Form-specific material intent.
+//!
+//! Slot-named Color / metallic-roughness maps live in [`crate::textures`].
+//! Bikanwarda visuals use the #1589 export GLB; palette colors remain a fallback
+//! for slots without a bound map.
 
 use bevy::prelude::Color;
 use characters::species::epiphant::{EpiphantColor, EpiphantColors};
@@ -6,7 +10,7 @@ use characters::species::epiphant::{EpiphantColor, EpiphantColors};
 /// Presentation knobs that do not change assembly topology.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BikanwardaPresentation {
-	/// Body/head palette (placeholder — no tattoo UVs yet).
+	/// Body/head palette used when a slot has no bound map.
 	pub colors: EpiphantColors,
 	/// Eye emissive multiplier for encounter readability.
 	pub eye_glow: f32,
@@ -15,19 +19,11 @@ pub struct BikanwardaPresentation {
 
 impl BikanwardaPresentation {
 	pub fn encounter() -> Self {
-		Self {
-			colors: EpiphantColors::default(),
-			eye_glow: 1.0,
-			label: "encounter-placeholder",
-		}
+		Self { colors: EpiphantColors::default(), eye_glow: 1.0, label: "encounter-placeholder" }
 	}
 
 	pub fn ward() -> Self {
-		Self {
-			colors: EpiphantColors::default(),
-			eye_glow: 0.85,
-			label: "ward-placeholder",
-		}
+		Self { colors: EpiphantColors::default(), eye_glow: 0.85, label: "ward-placeholder" }
 	}
 
 	pub fn enraged() -> Self {

@@ -9,6 +9,7 @@ The generated mob-character crate is [`generated/`](generated/) (`mob-characters
 | Path | Crate |
 | --- | --- |
 | [`lib/`](lib/) | **`characters`** |
+| [`mesh-export/`](mesh-export/) | **`character-mesh-export`** (Wavefront OBJ for DCC / Procreate) |
 | [`generated/`](generated/) | **`mob-characters`** |
 | [`rigs/`](rigs/) | **`character-rigs`** |
 | [`animations/`](animations/) | **`character-animations`** |

@@ -2,7 +2,7 @@
 
 use bevy::prelude::*;
 use bikanwarda_attacks::BikanwardaAttackParams;
-use bikanwarda_character::ENCOUNTER_LINEAR_SCALE;
+use bikanwarda_character::{BikanwardaCharacterPlugin, ENCOUNTER_LINEAR_SCALE};
 use encounters::{EncounterLifetimePolicy, EncounterSleepPolicy, EncountersPlugin};
 use lubikans::{LubikanCatalog, LubikanInterfacePlugin, LubikansPlugin};
 
@@ -43,6 +43,9 @@ impl Plugin for BikanwardaEncounterPlugin {
 			register_unlocks(&mut app.world_mut().resource_mut::<LubikanCatalog>(), &config);
 		}
 		outcomes::configure(app);
+		if !app.is_plugin_added::<BikanwardaCharacterPlugin>() {
+			app.add_plugins(BikanwardaCharacterPlugin);
+		}
 		app.add_plugins(crate::BossEncounterCombatPlugin);
 		app.add_plugins(crate::BossEncounterLocomotionPlugin);
 		app.add_plugins(crate::chains::BikanwardaChainPhysicsPlugin);

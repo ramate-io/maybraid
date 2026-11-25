@@ -23,6 +23,12 @@ pub struct BikanwardaActor {
 	pub uniform_scale: f32,
 }
 
+impl Default for BikanwardaActor {
+	fn default() -> Self {
+		BikanwardaActorRecipe::default().components()
+	}
+}
+
 /// Config → components for all Bikanwarda forms.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BikanwardaActorRecipe {
@@ -94,7 +100,15 @@ impl CharacterComponents for BikanwardaActor {
 	}
 
 	fn part_nodes_for_level(&self, level: LodSceneLevel) -> Layers<PartNode> {
-		self.epiphant.part_nodes_for_level(level)
+		// Same skinned / socketed Epiphant parts as every other Epiphant. Each
+		// painted slot only swaps its material here; [`crate::textures`] swaps the
+		// part's runtime mesh for the re-bound painted mesh (same skin, new UVs).
+		self.epiphant.part_nodes_for_level(level).map(|part| {
+			match crate::textures::material_ref_for_slot(part.slot, &self.presentation) {
+				Some(material) => part.with_material(material),
+				None => part,
+			}
+		})
 	}
 
 	fn preview_aabb(&self) -> Aabb3d {
@@ -118,5 +132,25 @@ mod tests {
 			.find(|part| part.slot == CharacterPartSlot::Nose)
 			.expect("epiphant nose part");
 		assert_eq!(nose.socket.as_ref().and_then(|s| s.bone), Some(MOUTH_EMIT_SOCKET));
+	}
+
+	#[test]
+	fn painted_parts_keep_epiphant_skin_socket_and_scene() {
+		let actor = BikanwardaActorRecipe::default().components();
+		let painted = actor.part_nodes_for_level(LodSceneLevel::High).flatten();
+		let epiphant = actor.epiphant.part_nodes_for_level(LodSceneLevel::High).flatten();
+		assert_eq!(painted.len(), epiphant.len());
+		for (painted, original) in painted.iter().zip(&epiphant) {
+			assert_eq!(painted.slot, original.slot);
+			assert_eq!(painted.scene, original.scene, "{:?} scene", painted.slot);
+			assert_eq!(painted.skin, original.skin, "{:?} skin", painted.slot);
+			assert_eq!(painted.socket, original.socket, "{:?} socket", painted.slot);
+			assert_eq!(painted.normalization, original.normalization);
+			assert_eq!(painted.feature, original.feature);
+		}
+		for slot in [CharacterPartSlot::BodyMesh, CharacterPartSlot::HeadMesh] {
+			let part = painted.iter().find(|part| part.slot == slot).expect("skinned part");
+			assert!(part.skin.is_some(), "{slot:?} must stay skinned to the rig");
+		}
 	}
 }

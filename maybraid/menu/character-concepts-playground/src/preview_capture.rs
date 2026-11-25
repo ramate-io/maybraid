@@ -1,10 +1,16 @@
 //! Headless / CI capture hooks (env-driven). Does not affect normal playground use.
 //!
 //! See `maybraid/world/layers/mobs/characters/animations/previews/epiphant-1130/README.md`.
+//!
+//! `CROZON_PREVIEW_CAPTURE_PNG` writes a Bevy GPU-readback still. X11 `scrot` of
+//! lavapipe stays black.
+
+use std::path::PathBuf;
 
 use bevy::camera::primitives::Aabb;
 use bevy::mesh::{Mesh, VertexAttributeValues};
 use bevy::prelude::*;
+use bevy::render::view::screenshot::{save_to_disk, Capturing, Screenshot};
 use bevy::shape::Aabb3d;
 use character_motion::{sample_bray_mouth_emit, BrayMouthEmit};
 use characters::species::epiphant::{pose::EpiphantPose, EpiphantConfig};
@@ -36,6 +42,12 @@ pub struct PreviewCaptureSettings {
 	pub interrupt_animation: Option<ConceptAnimation>,
 	pub hide_ui: bool,
 	pub draw_mouth_emit: bool,
+	/// Multiplier on auto-framed camera distance (close < 1, mid = 1).
+	pub camera_distance_scale: f32,
+	/// Orbit the auto-framed camera about +Y (degrees; 0 = front three-quarter).
+	pub camera_yaw_degrees: f32,
+	/// GPU-readback still path (`CROZON_PREVIEW_CAPTURE_PNG`).
+	pub capture_png: Option<PathBuf>,
 }
 
 impl PreviewCaptureSettings {
@@ -48,6 +60,9 @@ impl PreviewCaptureSettings {
 			interrupt_animation: env_parse_animation("CROZON_PREVIEW_INTERRUPT_ANIMATION"),
 			hide_ui: env_flag("CROZON_PREVIEW_HIDE_UI").unwrap_or(true),
 			draw_mouth_emit: env_flag("CROZON_PREVIEW_DRAW_MOUTH_EMIT").unwrap_or(false),
+			camera_distance_scale: env_parse_f32("CROZON_PREVIEW_CAMERA_DISTANCE").unwrap_or(1.0),
+			camera_yaw_degrees: env_parse_f32("CROZON_PREVIEW_CAMERA_YAW").unwrap_or(0.0),
+			capture_png: std::env::var("CROZON_PREVIEW_CAPTURE_PNG").ok().map(PathBuf::from),
 		}
 	}
 
@@ -57,6 +72,9 @@ impl PreviewCaptureSettings {
 			|| self.quit_after_secs.is_some()
 			|| self.interrupt_after_secs.is_some()
 			|| self.draw_mouth_emit
+			|| (self.camera_distance_scale - 1.0).abs() > f32::EPSILON
+			|| self.camera_yaw_degrees.abs() > f32::EPSILON
+			|| self.capture_png.is_some()
 	}
 }
 
@@ -91,7 +109,14 @@ pub fn load_preview_capture_settings(mut commands: Commands) {
 		commands.init_resource::<CaptureGroundContact>();
 		commands.init_resource::<PreviewCaptureInterruptState>();
 		commands.init_resource::<PendingCaptureInterrupt>();
+		commands.init_resource::<PreviewCaptureShotState>();
 	}
+}
+
+#[derive(Resource, Default)]
+pub(crate) struct PreviewCaptureShotState {
+	requested: bool,
+	meshes_ready_at: Option<f32>,
 }
 
 /// Marks the capture ground plane (excluded from mesh bounds).
@@ -106,12 +131,20 @@ pub struct CaptureGroundContact {
 
 /// Fallback when mesh bounds are not ready yet.
 pub fn capture_camera_frame_fallback(encounter_scale: f32) -> (Vec3, Vec3) {
+	capture_camera_frame_fallback_with_distance(encounter_scale, 1.0)
+}
+
+pub fn capture_camera_frame_fallback_with_distance(
+	encounter_scale: f32,
+	camera_distance_scale: f32,
+) -> (Vec3, Vec3) {
 	let scale = encounter_scale.max(1.0);
 	let ground_y = capture_ground_anchor_y(scale);
 	let center = Vec3::new(0.0, ground_y + 0.9 * scale, 0.0);
 	let distance = 5.5 * scale;
 	let dir = Vec3::new(0.42, 0.28, 0.86).normalize();
-	(center + dir * distance, center)
+	let eye = center + dir * distance;
+	(scale_camera_distance(eye, center, camera_distance_scale), center)
 }
 
 /// Frame the full character AABB (feet + ground) in a 3/4 elevated view.
@@ -137,6 +170,15 @@ pub fn capture_camera_frame_for_bounds(
 	let distance = dist_for_height.max(dist_for_width);
 	let dir = Vec3::new(0.42, 0.28, 0.86).normalize();
 	(center + dir * distance, center)
+}
+
+pub(crate) fn scale_camera_distance(eye: Vec3, look_at: Vec3, scale: f32) -> Vec3 {
+	look_at + (eye - look_at) * scale.max(0.05)
+}
+
+/// Orbit `eye` about the vertical axis through `look_at`.
+pub(crate) fn yaw_camera(eye: Vec3, look_at: Vec3, degrees: f32) -> Vec3 {
+	look_at + Quat::from_rotation_y(degrees.to_radians()) * (eye - look_at)
 }
 
 fn foot_bearing_part(slot: CharacterPartSlot) -> bool {
@@ -328,14 +370,67 @@ pub fn apply_pending_capture_interrupt(
 	}
 }
 
+/// GPU-readback still once the preview is revealed (lavapipe `scrot` is black).
+pub fn preview_capture_request_screenshot(
+	mut commands: Commands,
+	time: Res<Time>,
+	mut state: ResMut<PreviewCaptureShotState>,
+	settings: Option<Res<PreviewCaptureSettings>>,
+	visible: Query<&Visibility, With<ConceptPreviewRoot>>,
+) {
+	let Some(settings) = settings else {
+		return;
+	};
+	let Some(path) = settings.capture_png.clone() else {
+		return;
+	};
+	if state.requested {
+		return;
+	}
+	let revealed = visible.iter().any(|visibility| !matches!(visibility, Visibility::Hidden));
+	if !revealed {
+		return;
+	}
+	let now = time.elapsed_secs();
+	let ready_at = *state.meshes_ready_at.get_or_insert(now);
+	// 2048 maps + StandardMaterial stamp need a few frames on lavapipe.
+	if now - ready_at < 4.0 {
+		return;
+	}
+	info!("requesting GPU screenshot {}", path.display());
+	commands.spawn(Screenshot::primary_window()).observe(save_to_disk(path));
+	state.requested = true;
+}
+
 pub fn preview_capture_auto_quit(
 	time: Res<Time>,
 	settings: Option<Res<PreviewCaptureSettings>>,
+	shot: Option<Res<PreviewCaptureShotState>>,
+	capturing: Query<(), With<Capturing>>,
 	visible: Query<(), With<ConceptPreviewRoot>>,
 ) {
 	let Some(settings) = settings else {
 		return;
 	};
+	if let Some(path) = settings.capture_png.as_ref() {
+		let requested = shot.is_some_and(|state| state.requested);
+		if requested && capturing.is_empty() && path.is_file() {
+			info!("wrote GPU screenshot {}", path.display());
+			std::process::exit(0);
+		}
+		if let Some(quit) = settings.quit_after_secs {
+			if time.elapsed_secs() >= quit {
+				if !path.is_file() {
+					error!(
+						"capture quit without screenshot {} (requested={requested})",
+						path.display()
+					);
+				}
+				std::process::exit(0);
+			}
+		}
+		return;
+	}
 	let Some(quit) = settings.quit_after_secs else {
 		return;
 	};

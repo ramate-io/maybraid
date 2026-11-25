@@ -135,38 +135,39 @@ pub fn apply_camera_suggestion(
 ) {
 	if capture_locked.is_some() {
 		if let Some(settings) = capture_settings {
-			let aspect = cameras.iter().next().map_or(16.0 / 9.0, |(_, _, projection)| {
-				match projection {
+			let aspect =
+				cameras.iter().next().map_or(16.0 / 9.0, |(_, _, projection)| match projection {
 					Projection::Perspective(p) => p.aspect_ratio,
 					_ => 16.0 / 9.0,
-				}
-			});
-			let fov_y = cameras.iter().next().map_or(std::f32::consts::FRAC_PI_4, |(_, _, projection)| {
-				match projection {
-					Projection::Perspective(p) => p.fov,
-					_ => std::f32::consts::FRAC_PI_4,
-				}
-			});
-			let ground_y = ground_contact
-				.and_then(|contact| contact.y)
-				.unwrap_or_else(|| {
-					crate::preview_capture::capture_ground_anchor_y(settings.encounter_scale)
 				});
+			let fov_y =
+				cameras.iter().next().map_or(std::f32::consts::FRAC_PI_4, |(_, _, projection)| {
+					match projection {
+						Projection::Perspective(p) => p.fov,
+						_ => std::f32::consts::FRAC_PI_4,
+					}
+				});
+			let ground_y = ground_contact.and_then(|contact| contact.y).unwrap_or_else(|| {
+				crate::preview_capture::capture_ground_anchor_y(settings.encounter_scale)
+			});
 			let (eye, look_at) = crate::preview_capture::union_preview_mesh_bounds(
 				mesh_assets.as_ref(),
 				preview_meshes.iter(),
 			)
-				.map(|bounds| {
-					crate::preview_capture::capture_camera_frame_for_bounds(
-						bounds,
-						aspect,
-						fov_y,
-						ground_y,
-					)
-				})
-				.unwrap_or_else(|| {
-					crate::preview_capture::capture_camera_frame_fallback(settings.encounter_scale)
-				});
+			.map(|bounds| {
+				crate::preview_capture::capture_camera_frame_for_bounds(
+					bounds, aspect, fov_y, ground_y,
+				)
+			})
+			.unwrap_or_else(|| {
+				crate::preview_capture::capture_camera_frame_fallback(settings.encounter_scale)
+			});
+			let eye = crate::preview_capture::scale_camera_distance(
+				eye,
+				look_at,
+				settings.camera_distance_scale,
+			);
+			let eye = crate::preview_capture::yaw_camera(eye, look_at, settings.camera_yaw_degrees);
 			for (mut transform, mut controller, _) in &mut cameras {
 				characters_playground::camera::orient_camera(
 					&mut transform,
