@@ -1,5 +1,6 @@
 //! Vegetation shaders: reusable Bevy [`Material`] types with embedded WESL.
 //!
+//! - [`wesl`] — importable vegetation math (hash, curves, wind, LOD, shading, layouts).
 //! - [`StickMaterial`] — edge-accent PBR (from `playgrounds/objects/assets/shaders/edge_material.wgsl`).
 //! - [`LeafMaterial`] — object-space leafy breakup + vertex sway + split light.
 //!   Noisy rim `discard` + interior holes near/mid only, in ball-radii.
@@ -18,6 +19,7 @@ mod frond_material;
 mod leaf_material;
 mod material_lib;
 mod stick_material;
+pub mod wesl;
 
 pub use bump_out_material::{
 	BumpOutMaterial, BumpOutMaterialPlugin, BumpOutUniform, BUMP_OUT_MATERIAL,
@@ -32,13 +34,19 @@ pub use material_lib::{
 	VegetationMaterialRefPlugin,
 };
 pub use stick_material::{StickMaterial, StickMaterialPlugin};
+pub use wesl::VegetationWeslPlugin;
 
 /// Convenience plugin that registers vegetation materials.
 pub struct VegetationShadersPlugin;
 
 impl Plugin for VegetationShadersPlugin {
 	fn build(&self, app: &mut App) {
-		app.add_plugins((StickMaterialPlugin, LeafMaterialPlugin, FrondMaterialPlugin));
+		app.add_plugins((
+			VegetationWeslPlugin,
+			StickMaterialPlugin,
+			LeafMaterialPlugin,
+			FrondMaterialPlugin,
+		));
 		if !app.is_plugin_added::<BumpOutMaterialPlugin>() {
 			app.add_plugins(BumpOutMaterialPlugin);
 		}

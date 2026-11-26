@@ -1,0 +1,30 @@
+[package]
+name = "vegetation-grass-field-playground"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+authors = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+publish = { workspace = true }
+rust-version = { workspace = true }
+
+[[bin]]
+name = "vegetation-grass-field-playground"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { workspace = true }
+camera-controls = { workspace = true }
+clap = { workspace = true }
+game-commands = { workspace = true }
+terrain-shaders = { workspace = true }
+vegetation-components = { workspace = true }
+vegetation-grass-field = { workspace = true }
+vegetation-shaders = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+
+[lints]
+workspace = true
