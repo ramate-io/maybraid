@@ -10,6 +10,7 @@ publish = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+maybraid-vfx-macros = { workspace = true }
 bevy = { workspace = true, features = ["ktx2", "zstd_rust", "basis-universal"] }
 bevy_hanabi = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

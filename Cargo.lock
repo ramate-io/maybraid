@@ -7631,9 +7631,20 @@ version = "0.1.5"
 dependencies = [
  "bevy",
  "bevy_hanabi",
+ "maybraid-vfx-macros",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "maybraid-vfx-macros"
+version = "0.1.5"
+dependencies = [
+ "proc-macro-crate",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
 ]
 
 [[package]]

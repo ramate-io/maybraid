@@ -26,7 +26,7 @@ impl ParticlePart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-	) {
+	) -> Entity {
 		let count = (self.count * spawn.clamped_intensity()).clamp(1.0, self.capacity as f32);
 		let mut entity = commands.spawn((
 			Name::new(format!("vfx-layer-{}", self.name)),
@@ -48,6 +48,7 @@ impl ParticlePart {
 		if !self.images.is_empty() {
 			entity.insert(EffectMaterial { images: self.images.clone() });
 		}
+		entity.id()
 	}
 }
 

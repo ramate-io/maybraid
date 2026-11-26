@@ -118,7 +118,7 @@ impl SoundwavePart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-	) {
+	) -> Entity {
 		let heading = transform.rotation * Vec3::Y;
 		let radius = SOUNDWAVE_MAJOR * transform.scale.x.abs().max(transform.scale.z.abs());
 		let thickness = SOUNDWAVE_MINOR * 2.0 * transform.scale.y.abs();
@@ -133,30 +133,32 @@ impl SoundwavePart {
 			tint,
 			spawn.clamped_intensity(),
 		);
-		commands.spawn((
-			Name::new(format!("vfx-soundwave-{}", self.name)),
-			ChildOf(parent),
-			VfxMemberOf(parent),
-			Mesh3d(self.mesh.clone()),
-			transform,
-			Visibility::Inherited,
-			NotShadowCaster,
-			SoundwaveMaterialSlot(material),
-			VfxSoundwave {
-				origin: world_origin,
-				direction: heading,
-				radius,
-				thickness,
-				age: 0.0,
-				playback: spawn.clamped_playback(),
-			},
-			VfxLayerLife {
-				age: 0.0,
-				duration: self.duration,
-				playback: spawn.clamped_playback(),
-				waiting_for_emitter: false,
-			},
-		));
+		commands
+			.spawn((
+				Name::new(format!("vfx-soundwave-{}", self.name)),
+				ChildOf(parent),
+				VfxMemberOf(parent),
+				Mesh3d(self.mesh.clone()),
+				transform,
+				Visibility::Inherited,
+				NotShadowCaster,
+				SoundwaveMaterialSlot(material),
+				VfxSoundwave {
+					origin: world_origin,
+					direction: heading,
+					radius,
+					thickness,
+					age: 0.0,
+					playback: spawn.clamped_playback(),
+				},
+				VfxLayerLife {
+					age: 0.0,
+					duration: self.duration,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: false,
+				},
+			))
+			.id()
 	}
 }
 

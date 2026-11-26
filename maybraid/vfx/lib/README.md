@@ -102,3 +102,20 @@ warm the effect before comparing a precise authored timestamp.
 See [asset metadata and provenance](../../assets/vfx/dust/README.md),
 [offline export tools](../../../bin/vfx/README.md), and
 [playground controls](../playground/README.md).
+
+## Authoring conveniences
+
+The [migration guide](../MIGRATION.md) has before/after examples from `main`.
+Use `EffectLayer::flipbook_path(path)` for a resource-free flipbook layer, optionally
+labelled with `with_name`. `with_translation` and `with_rotation` preserve other
+local transform fields. `EffectLayerGroup` collects reusable layers and applies
+relative delay, translation, rotation, and uniform scale in call order, then flattens
+into the existing runtime. Group scaling moves offsets as well as resizing parts;
+layer `with_scale` only resizes the part.
+
+The re-exported `EffectRecipe` derive accepts
+`#[effect(name = "impact", layers = Self::layers)]`. The layer function receives
+`&self` and returns an iterator of `EffectLayer` (including a group). Generic recipe
+parameters and handwritten trait implementations remain supported. The derive adds
+no systems or registration requirements. See the playground's `VfxPreviewAppExt`
+for optional custom `/show` factories and layer inspection.

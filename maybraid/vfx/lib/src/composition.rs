@@ -150,6 +150,8 @@ pub enum EffectPart {
 /// One timed piece of a composite: part, delay, local pose, scale.
 #[derive(Clone, Debug)]
 pub struct EffectLayer {
+	/// Optional author-facing label for diagnostics and the preview inspector.
+	pub name: Option<String>,
 	pub part: EffectPart,
 	pub delay: f32,
 	pub transform: Transform,
@@ -157,8 +159,45 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
+	/// A packaged flipbook needs only its asset-relative manifest path.
+	pub fn flipbook_path(path: impl Into<FlipbookRef>) -> Self {
+		Self::flipbook(FlipbookPart::new(path))
+	}
+
+	pub fn with_name(mut self, name: impl Into<String>) -> Self {
+		self.name = Some(name.into());
+		self
+	}
+
+	/// Replace translation while preserving rotation and axis scale.
+	pub fn with_translation(mut self, translation: Vec3) -> Self {
+		self.transform.translation = translation;
+		self
+	}
+
+	/// Replace rotation while preserving translation and axis scale.
+	pub fn with_rotation(mut self, rotation: Quat) -> Self {
+		self.transform.rotation = rotation;
+		self
+	}
+
+	pub fn into_group(self) -> EffectLayerGroup {
+		EffectLayerGroup::new([self])
+	}
+
+	pub fn label(&self) -> &str {
+		self.name.as_deref().unwrap_or_else(|| match &self.part {
+			EffectPart::Flipbook(part) => &part.flipbook.path,
+			EffectPart::Particle(part) => &part.name,
+			EffectPart::Light(_) => "light",
+			EffectPart::Mesh(part) => &part.name,
+			EffectPart::Soundwave(part) => &part.name,
+		})
+	}
+
 	pub fn flipbook(part: FlipbookPart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Flipbook(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -168,6 +207,7 @@ impl EffectLayer {
 
 	pub fn particle(part: ParticlePart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Particle(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -177,6 +217,7 @@ impl EffectLayer {
 
 	pub fn light(pulse: LightPulse) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Light(pulse),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -186,6 +227,7 @@ impl EffectLayer {
 
 	pub fn mesh(part: MeshPart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Mesh(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -195,6 +237,7 @@ impl EffectLayer {
 
 	pub fn soundwave(part: SoundwavePart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Soundwave(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -207,6 +250,7 @@ impl EffectLayer {
 		self
 	}
 
+	/// Uniform size multiplier, multiplied by `transform.scale`; does not move the layer.
 	pub fn with_scale(mut self, scale: f32) -> Self {
 		self.scale = scale;
 		self
@@ -241,6 +285,13 @@ pub struct EffectDefinition {
 }
 
 impl EffectDefinition {
+	pub fn from_groups(
+		name: impl Into<String>,
+		groups: impl IntoIterator<Item = EffectLayerGroup>,
+	) -> Self {
+		Self::new(name, groups.into_iter().flatten())
+	}
+
 	pub fn new(name: impl Into<String>, layers: impl IntoIterator<Item = EffectLayer>) -> Self {
 		Self { name: name.into(), layers: layers.into_iter().collect() }
 	}
@@ -255,3 +306,63 @@ impl EffectDefinition {
 pub trait EffectRecipe {
 	fn effect_definition(&self) -> EffectDefinition;
 }
+
+/// Reusable authored layers, flattened before spawning. Operations compose in call order.
+/// Uniform group scaling also scales offsets. Restricting it to a scalar avoids shear
+/// when composing rotated layers with nonuniform local scale.
+#[derive(Clone, Debug, Default)]
+pub struct EffectLayerGroup {
+	layers: Vec<EffectLayer>,
+}
+
+impl EffectLayerGroup {
+	pub fn new(layers: impl IntoIterator<Item = EffectLayer>) -> Self {
+		Self { layers: layers.into_iter().collect() }
+	}
+
+	pub fn from_groups(groups: impl IntoIterator<Item = Self>) -> Self {
+		Self::new(groups.into_iter().flatten())
+	}
+
+	/// Add a delay to every layer, preserving relative timing.
+	pub fn delayed(mut self, seconds: f32) -> Self {
+		for layer in &mut self.layers {
+			layer.delay += seconds;
+		}
+		self
+	}
+
+	pub fn translated(mut self, offset: Vec3) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation += offset;
+		}
+		self
+	}
+
+	pub fn rotated(mut self, rotation: Quat) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation = rotation * layer.transform.translation;
+			layer.transform.rotation = rotation * layer.transform.rotation;
+		}
+		self
+	}
+
+	pub fn scaled(mut self, scale: f32) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation *= scale;
+			layer.scale *= scale;
+		}
+		self
+	}
+}
+
+impl IntoIterator for EffectLayerGroup {
+	type Item = EffectLayer;
+	type IntoIter = std::vec::IntoIter<EffectLayer>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.layers.into_iter()
+	}
+}
+
+#[cfg(test)]
+mod tests;

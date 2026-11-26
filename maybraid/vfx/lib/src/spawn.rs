@@ -139,8 +139,8 @@ impl Scene for Vfx {
 				let immediate = immediate.clone();
 				ctx.entity.world_scope(|world| {
 					let mut commands = world.commands();
-					for layer in &immediate {
-						realize_layer(&mut commands, parent, layer, &spawn);
+					for (index, layer) in &immediate {
+						realize_layer(&mut commands, parent, *index, layer, &spawn);
 					}
 					world.flush();
 				});
@@ -169,7 +169,7 @@ pub struct VfxInstance {
 /// Layers waiting for their start delay relative to the root.
 #[derive(Clone, Component, Debug)]
 pub struct VfxPendingLayers {
-	pub layers: Vec<EffectLayer>,
+	pub layers: Vec<(usize, EffectLayer)>,
 	pub spawn: VfxSpawn,
 }
 
@@ -211,7 +211,7 @@ struct PreparedVfx {
 	instance: VfxInstance,
 	pending_component: VfxPendingLayers,
 	spawn: VfxSpawn,
-	immediate: Vec<EffectLayer>,
+	immediate: Vec<(usize, EffectLayer)>,
 }
 
 impl PreparedVfx {
@@ -219,11 +219,11 @@ impl PreparedVfx {
 		let spawn = spawn.resolved();
 		let mut pending = Vec::new();
 		let mut immediate = Vec::new();
-		for layer in &definition.layers {
+		for (index, layer) in definition.layers.iter().enumerate() {
 			if layer.delay <= 0.0 {
-				immediate.push(layer.clone());
+				immediate.push((index, layer.clone()));
 			} else {
-				pending.push(layer.clone());
+				pending.push((index, layer.clone()));
 			}
 		}
 		Self {
@@ -260,8 +260,8 @@ pub fn spawn_vfx(
 			NotShadowCaster,
 		))
 		.id();
-	for layer in prepared.immediate {
-		realize_layer(commands, root, &layer, &spawn);
+	for (index, layer) in prepared.immediate {
+		realize_layer(commands, root, index, &layer, &spawn);
 	}
 	root
 }
@@ -280,6 +280,7 @@ impl SpawnVfxExt for Commands<'_, '_> {
 pub fn realize_layer(
 	commands: &mut Commands,
 	parent: Entity,
+	index: usize,
 	layer: &EffectLayer,
 	spawn: &VfxSpawn,
 ) {
@@ -288,43 +289,48 @@ pub fn realize_layer(
 		rotation: layer.transform.rotation,
 		scale: layer.transform.scale * layer.scale,
 	};
-	match &layer.part {
+	let entity = match &layer.part {
 		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
 			let range = pulse.range;
-			commands.spawn((
-				Name::new("vfx-layer-flash"),
-				ChildOf(parent),
-				VfxMemberOf(parent),
-				transform,
-				PointLight {
-					color,
-					intensity: 0.0,
-					range,
-					shadow_maps_enabled: false,
-					..default()
-				},
-				VfxFlash {
-					age: 0.0,
-					fade: pulse.fade,
-					peak,
-					playback: spawn.clamped_playback(),
-					range,
-				},
-				VfxLayerLife {
-					age: 0.0,
-					duration: pulse.fade,
-					playback: spawn.clamped_playback(),
-					waiting_for_emitter: false,
-				},
-			));
+			commands
+				.spawn((
+					Name::new("vfx-layer-flash"),
+					ChildOf(parent),
+					VfxMemberOf(parent),
+					transform,
+					PointLight {
+						color,
+						intensity: 0.0,
+						range,
+						shadow_maps_enabled: false,
+						..default()
+					},
+					VfxFlash {
+						age: 0.0,
+						fade: pulse.fade,
+						peak,
+						playback: spawn.clamped_playback(),
+						range,
+					},
+					VfxLayerLife {
+						age: 0.0,
+						duration: pulse.fade,
+						playback: spawn.clamped_playback(),
+						waiting_for_emitter: false,
+					},
+				))
+				.id()
 		}
 		EffectPart::Mesh(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Soundwave(part) => part.spawn(commands, parent, transform, spawn),
-	}
+	};
+	commands
+		.entity(entity)
+		.insert(crate::inspection::VfxLayerInfo { index, label: layer.label().to_owned() });
 }
 
 #[cfg(test)]

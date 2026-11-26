@@ -54,3 +54,40 @@ comparing a particular frame; no guessed startup delay is applied.
 Repeating playback waits for actual instance completion, including asset readiness
 and delayed layers, then pauses 0.45 seconds before replaying. No duration metadata
 is duplicated in the recipe or playground.
+
+## Add a recipe and inspect its layers
+
+See the [migration guide](../MIGRATION.md) for a complete typed recipe example.
+Register its factory on your playground app (before or after adding the plugin):
+
+```rust,ignore
+use vfx_playground::VfxPreviewAppExt;
+app.register_vfx_preview("impact", || Impact { size: 0.8 });
+```
+
+Then use `/show impact`. Custom names match exactly and take precedence over builtin
+aliases. Factories run once per spawn/rebuild, and the spawned root keeps the typed
+recipe component. Registration is only for this preview host; game spawning still
+uses `Effect::new(recipe)` directly.
+
+The scrollable layer panel inspects the most recently spawned preview, including
+delayed layers. Use the mouse wheel over it to scroll; F1 hides both panels.
+It reports pending/loading/playing/finished and the flipbook's two interpolated
+frames. Completed state remains visible until the next preview. Load errors include
+recipe, layer index/label, manifest path, and dependency error, and stop replay.
+
+- `solo 1` — rebuild with only authored layer 1; clears mute selections.
+- `mute 0` — rebuild without layer 0. Indices stay those in the full definition.
+- `unsolo` / `unmute` — clear the corresponding selection and rebuild.
+- `pause`, then `step [seconds]` — advance once while staying paused (default 1/60 s).
+  Time steps are in simulation seconds; the effect's playback multiplier still applies.
+  This is forward simulation, not arbitrary seeking or GPU particle rewind.
+- `reset` — call the factory again with the last request's seed and current selection.
+- `show ...` — clear selections and preview the requested effect.
+- `reload` — request reloads of the preview's flipbook manifests and images. After
+  loading finishes, `reset` recreates the recipe and materials. Rust edits require
+  recompilation. No filesystem watcher or Rust hot-code loader is enabled.
+
+Solo and mute exclude layers before realization, including their lights and particles.
+They do not simply hide already-running entities. All preview controls use the shared
+VFX runtime; they introduce no game/world dependencies.

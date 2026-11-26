@@ -38,6 +38,7 @@ fn test_app_at(file_path: String) -> App {
 	.init_asset::<Mesh>()
 	.init_asset::<DustMaterial>()
 	.init_resource::<FlipbookProxyMesh>()
+	.add_message::<crate::VfxLoadFailure>()
 	.insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_millis(100)))
 	.add_systems(Update, (resolve_flipbooks, tick_dust, tick_vfx_instances).chain())
 	.add_systems(PostUpdate, gate_vfx_instances);
@@ -413,6 +414,14 @@ fn direct_unregistered_path_and_failed_image_cancel_even_delayed_layers(
 			.ok_or("missing layer")?;
 		wait_until(&mut app, |world| world.get_entity(root).is_err())?;
 		assert!(app.world().get_entity(child).is_err());
+		let failures = app.world().resource::<Messages<crate::VfxLoadFailure>>();
+		let mut cursor = failures.get_cursor();
+		let failure = cursor.read(failures).last().ok_or("missing failure diagnostic")?;
+		assert_eq!(failure.root, root);
+		assert_eq!(failure.effect, "dust");
+		assert_eq!(failure.path, "unregistered.flipbook.json");
+		assert!(failure.layer.contains("0 (unregistered.flipbook.json)"));
+		assert!(failure.error.contains("missing.ktx2"));
 	}
 	std::fs::remove_dir_all(dir)?;
 	Ok(())

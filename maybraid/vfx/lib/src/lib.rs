@@ -7,9 +7,13 @@
 //! reusable flash / fireball / smoke / sparks layers and the composed
 //! `fiery_explosion`.
 
+// Allow the derive to use the same absolute path inside this crate and in examples/tests.
+extern crate self as maybraid_vfx;
+
 pub mod composition;
 pub mod effects;
 pub mod flipbook_ref;
+pub mod inspection;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
@@ -20,15 +24,18 @@ pub mod parts;
 pub mod seed;
 pub mod spawn;
 
+pub use maybraid_vfx_macros::EffectRecipe;
+
 pub use bevy_hanabi::prelude::EffectProperties;
 pub use composition::{
-	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
-	LobeSpec, MeshPart, ParticlePart, ParticleShade, SoundwavePart,
+	EffectDefinition, EffectLayer, EffectLayerGroup, EffectPart, EffectRecipe, FlipbookPart,
+	LightPulse, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade, SoundwavePart,
 };
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
 pub use effects::soundwave::Soundwave;
 pub use flipbook_ref::FlipbookRef;
+pub use inspection::{VfxLayerInfo, VfxLoadFailure};
 pub use layers::dust::DustLayer;
 pub use layers::soundwave::{
 	attach_soundwave_trail, fade_trail, SOUNDWAVE_STREAK_NAME, SOUNDWAVE_WISP_NAME,

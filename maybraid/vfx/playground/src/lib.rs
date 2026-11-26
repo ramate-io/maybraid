@@ -3,6 +3,9 @@
 mod camera;
 pub mod commands;
 mod ground;
+mod inspector;
+mod preview;
+pub use preview::{PreviewRecipes, VfxPreviewAppExt};
 mod show;
 mod ui;
 
@@ -23,7 +26,11 @@ pub struct VfxPlaygroundPlugin;
 
 impl Plugin for VfxPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<PendingVfxShows>()
+		app.init_resource::<PreviewRecipes>()
+			.init_resource::<preview::PreviewSelection>()
+			.init_resource::<preview::PreviewStep>()
+			.init_resource::<inspector::PreviewInspector>()
+			.init_resource::<PendingVfxShows>()
 			.init_resource::<LastVfxShow>()
 			.init_resource::<RepeatingVfxShow>()
 			.init_resource::<PreviewFreeze>()
@@ -32,7 +39,13 @@ impl Plugin for VfxPlaygroundPlugin {
 			.init_resource::<SpreadOnce>()
 			.add_plugins(VfxPlugin)
 			.add_plugins(GameCommandPlugin::<PlaygroundCommand>::with_config(ui::ui_config()));
-		app.add_systems(Startup, (camera::setup_camera, setup_lighting, setup_ground))
+		app.add_systems(First, preview::step_preview.after(bevy::time::TimeSystems))
+			.add_observer(ui::scroll_layer_inspector)
+			.add_systems(Last, inspector::inspect_preview)
+			.add_systems(
+				Startup,
+				(camera::setup_camera, setup_lighting, setup_ground, ui::setup_layer_inspector),
+			)
 			.add_systems(
 				Update,
 				(
@@ -42,6 +55,7 @@ impl Plugin for VfxPlaygroundPlugin {
 					apply_pending_shows,
 					repeat_shown_effect.after(apply_pending_shows),
 					pause_at_frozen_age.after(repeat_shown_effect),
+					ui::sync_layer_inspector,
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
@@ -74,10 +88,20 @@ mod tests {
 
 	#[test]
 	fn parses_playback_controls() -> Result<(), String> {
-		for line in ["pause", "play", "reset", "cancel", "spread"] {
+		for line in [
+			"pause", "play", "reset", "cancel", "spread", "reload", "solo 1", "mute 2", "unsolo",
+			"unmute", "step", "step 0.1",
+		] {
 			<PlaygroundCommand as GameCommand>::parse_line(line)?;
 		}
 		Ok(())
+	}
+
+	#[test]
+	fn rejects_invalid_steps() {
+		for line in ["step NaN", "step inf", "step 0", "step -1", "step 1.1"] {
+			assert!(<PlaygroundCommand as GameCommand>::parse_line(line).is_err(), "{line}");
+		}
 	}
 
 	#[test]

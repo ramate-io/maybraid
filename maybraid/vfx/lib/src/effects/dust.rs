@@ -2,11 +2,12 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{EffectDefinition, EffectRecipe, FlipbookPart};
+use crate::composition::{EffectLayer, FlipbookPart};
 use crate::layers::dust::DustLayer;
 
 /// Authored dust recipe. Mutating this after spawn does not rebuild the instance.
-#[derive(Component, Clone, Debug)]
+#[derive(Component, Clone, Debug, crate::EffectRecipe)]
+#[effect(name = "dust", layers = Self::layers)]
 pub struct Dust {
 	pub layer: DustLayer,
 }
@@ -29,8 +30,8 @@ impl Default for Dust {
 	}
 }
 
-impl EffectRecipe for Dust {
-	fn effect_definition(&self) -> EffectDefinition {
-		self.layer.effect_definition()
+impl Dust {
+	fn layers(&self) -> [EffectLayer; 1] {
+		self.layer.effect_layers()
 	}
 }

@@ -70,14 +70,14 @@ pub fn tick_vfx_instances(
 		let spawn = pending.spawn.clone();
 		let mut remain = Vec::new();
 		let mut realized = false;
-		for layer in pending.layers.drain(..) {
+		for (index, layer) in pending.layers.drain(..) {
 			if instance.age + 1e-4 >= layer.delay {
 				realized = true;
 				let actual_start = instance.age;
 				instance.duration = instance.duration.max(actual_start + layer.part_lifetime());
-				realize_layer(&mut commands, entity, &layer, &spawn);
+				realize_layer(&mut commands, entity, index, &layer, &spawn);
 			} else {
-				remain.push(layer);
+				remain.push((index, layer));
 			}
 		}
 		pending.layers = remain;

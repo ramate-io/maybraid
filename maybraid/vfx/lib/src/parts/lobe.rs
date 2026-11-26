@@ -31,7 +31,7 @@ impl MeshPart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-	) {
+	) -> Entity {
 		let cluster = commands
 			.spawn((
 				Name::new(format!("vfx-layer-{}", self.name)),
@@ -71,6 +71,7 @@ impl MeshPart {
 				LobeMaterialSlot(material),
 			));
 		}
+		cluster
 	}
 }
 

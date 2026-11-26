@@ -3,7 +3,6 @@
 use bevy::prelude::*;
 use clap::Parser;
 use game_commands::command::{CommandScript, GameCommand};
-use maybraid_vfx::canonicalize_effect_name;
 
 pub const PLAYGROUND_CLI_NAME: &str = "vfx";
 pub type Script = CommandScript<PlaygroundCommand>;
@@ -69,6 +68,25 @@ pub enum PlaygroundCommand {
 	Play,
 	/// Stop automatically repeating the last show.
 	Noloop,
+	/// Rebuild with only this zero-based authored layer (clears mute selections).
+	Solo {
+		layer: usize,
+	},
+	/// Rebuild without this zero-based authored layer.
+	Mute {
+		layer: usize,
+	},
+	/// Restore all layers excluded by solo.
+	Unsolo,
+	/// Restore every muted layer.
+	Unmute,
+	/// Advance a paused preview by seconds (default: 1/60 s); inspector shows flipbook frames.
+	Step {
+		#[arg(default_value = "0.016666667", value_parser = step_seconds)]
+		seconds: f32,
+	},
+	/// Reload the last preview's manifests and images; reset to rebuild materials afterward.
+	Reload,
 }
 
 /// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
@@ -136,13 +154,7 @@ impl PlaygroundCommand {
 				);
 			}
 			Self::Show { effect, scale, intensity, distance, seed, playback } => {
-				let Some(name) = canonicalize_effect_name(&effect) else {
-					*console = format!(
-						"unknown effect `{effect}` — try fiery-explosion, flash, fireball, smoke, sparks, dust, soundwave"
-					);
-					return;
-				};
-				queue_show(commands, console, name, scale, intensity, distance, seed, playback);
+				queue_show(commands, console, &effect, scale, intensity, distance, seed, playback);
 			}
 			Self::Spread => {
 				*console = "spread near / mid / far".into();
@@ -178,28 +190,7 @@ impl PlaygroundCommand {
 			}
 			Self::Reset | Self::Cancel => {
 				let reset = matches!(self, Self::Reset);
-				commands.queue(move |world: &mut World| {
-					let roots: Vec<_> = world
-						.query_filtered::<Entity, With<maybraid_vfx::VfxInstance>>()
-						.iter(world)
-						.collect();
-					for root in roots {
-						world.despawn(root);
-					}
-					world.resource_mut::<PendingVfxShows>().0.clear();
-					world.resource_mut::<crate::show::RepeatingVfxShow>().request = None;
-					world.resource_mut::<SpreadOnce>().0 = false;
-					world.resource_mut::<PreviewFreeze>().age = None;
-					world.resource_mut::<LoopEnabled>().0 = reset;
-					world.resource_mut::<Time<Virtual>>().unpause();
-					if reset {
-						if let Some(request) =
-							world.resource::<crate::show::LastVfxShow>().request.clone()
-						{
-							world.resource_mut::<PendingVfxShows>().0.push(request);
-						}
-					}
-				});
+				commands.queue(move |world: &mut World| restart_preview(world, reset));
 				*console = if reset { "reset" } else { "cancelled" }.into();
 			}
 			Self::Play => {
@@ -208,6 +199,54 @@ impl PlaygroundCommand {
 					world.resource_mut::<Time<Virtual>>().unpause();
 				});
 				*console = "play".into();
+			}
+			Self::Solo { .. } | Self::Mute { .. } | Self::Unsolo | Self::Unmute => {
+				commands.queue(move |world: &mut World| {
+					if let Self::Solo { layer } | Self::Mute { layer } = self {
+						if layer >= world.resource::<crate::inspector::PreviewInspector>().layers.len() {
+							world.resource_mut::<crate::show::LastVfxShow>().label = format!("no layer {layer}; show an effect and use an index from its inspector");
+							return;
+						}
+					}
+					let mut selection = world.resource_mut::<crate::preview::PreviewSelection>();
+					match self {
+						Self::Solo { layer } => { selection.solo = Some(layer); selection.muted.clear(); }
+						Self::Mute { layer } => { selection.muted.insert(layer); }
+						Self::Unsolo => selection.solo = None,
+						Self::Unmute => selection.muted.clear(),
+						_ => {}
+					}
+					restart_preview(world, true);
+				});
+				*console = "rebuild preview with selected layers".into();
+			}
+			Self::Step { seconds } => {
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<Time<Virtual>>().pause();
+					world.resource_mut::<PreviewFreeze>().age = None;
+					world.resource_mut::<crate::preview::PreviewStep>().0 =
+						Some(std::time::Duration::from_secs_f32(seconds));
+				});
+				*console = format!("step {seconds:.6}s (paused)");
+			}
+			Self::Reload => {
+				commands.queue(|world: &mut World| {
+					let inspector = world.resource::<crate::inspector::PreviewInspector>();
+					let server = world.resource::<AssetServer>();
+					let assets = world.resource::<Assets<maybraid_vfx::PackagedFlipbook>>();
+					for path in inspector.layers.iter().filter_map(|row| row.path.as_ref()) {
+						if let Some(asset) = server
+							.get_handle::<maybraid_vfx::PackagedFlipbook>(path.clone())
+							.and_then(|handle| assets.get(&handle))
+						{
+							if let Some(image) = server.get_path(asset.image.id()) {
+								server.reload(image);
+							}
+						}
+						server.reload(path.clone());
+					}
+				});
+				*console = "reload requested; reset after loading to rebuild the recipe and materials (Rust edits require recompilation)".into();
 			}
 			Self::Noloop => {
 				commands.queue(|world: &mut World| {
@@ -243,6 +282,8 @@ fn queue_show(
 	);
 	let name = name.to_string();
 	commands.queue(move |world: &mut World| {
+		*world.resource_mut::<crate::preview::PreviewSelection>() = default();
+		world.resource_mut::<PreviewFreeze>().age = None;
 		world.resource_mut::<LoopEnabled>().0 = true;
 		world.resource_mut::<Time<Virtual>>().unpause();
 		world.resource_mut::<PendingVfxShows>().0.push(VfxShowRequest {
@@ -254,4 +295,42 @@ fn queue_show(
 			playback,
 		});
 	});
+}
+
+fn step_seconds(value: &str) -> Result<f32, String> {
+	let seconds: f32 = value.parse().map_err(|_| "expected seconds")?;
+	if !seconds.is_finite() || seconds <= 0. || seconds > 1. {
+		return Err("step must be greater than zero and at most one second".into());
+	}
+	Ok(seconds)
+}
+
+fn restart_preview(world: &mut World, reset: bool) {
+	let roots: Vec<_> = world
+		.query_filtered::<Entity, With<maybraid_vfx::VfxInstance>>()
+		.iter(world)
+		.collect();
+	for root in roots {
+		world.despawn(root);
+	}
+	world.resource_mut::<PendingVfxShows>().0.clear();
+	world.resource_mut::<crate::show::RepeatingVfxShow>().request = None;
+	world.resource_mut::<SpreadOnce>().0 = false;
+	world.resource_mut::<PreviewFreeze>().age = None;
+	world.resource_mut::<crate::preview::PreviewStep>().0 = None;
+	world.resource_mut::<LoopEnabled>().0 = reset;
+	world.resource_mut::<Time<Virtual>>().unpause();
+	let mut inspector = world.resource_mut::<crate::inspector::PreviewInspector>();
+	inspector.root = None;
+	inspector.failure = None;
+	for row in &mut inspector.layers {
+		if row.runtime_index.is_some() {
+			row.status = "cancelled".into();
+		}
+	}
+	if reset {
+		if let Some(request) = world.resource::<crate::show::LastVfxShow>().request.clone() {
+			world.resource_mut::<PendingVfxShows>().0.push(request);
+		}
+	}
 }

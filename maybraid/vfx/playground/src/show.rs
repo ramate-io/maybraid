@@ -1,11 +1,11 @@
 //! Apply queued `/show` requests through the crate spawn helper.
 
 use bevy::prelude::*;
-use bevy::scene::prelude::bsn;
 use game_commands::ui::GameCommandStatusText;
-use maybraid_vfx::{
-	canonicalize_effect_name, Effect, Vfx, VfxLibrary, VfxSpawn, DUST, FIERY_EXPLOSION,
-};
+use maybraid_vfx::{canonicalize_effect_name, VfxLibrary, DUST, FIERY_EXPLOSION};
+
+use crate::inspector::PreviewInspector;
+use crate::preview::{PreviewEffect, PreviewRecipes, PreviewSelection};
 
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
 
@@ -28,6 +28,9 @@ pub struct RepeatingVfxShow {
 pub fn apply_pending_shows(
 	mut commands: Commands,
 	library: Option<Res<VfxLibrary>>,
+	registry: Res<PreviewRecipes>,
+	selection: Res<PreviewSelection>,
+	mut inspector: ResMut<PreviewInspector>,
 	mut pending: ResMut<PendingVfxShows>,
 	mut last: ResMut<LastVfxShow>,
 	mut repeating: ResMut<RepeatingVfxShow>,
@@ -57,10 +60,16 @@ pub fn apply_pending_shows(
 		}
 	}
 	for request in pending.0.drain(..) {
-		let Some(definition) = library.get(&request.effect) else {
+		let Some(preview) = preview(&registry, &library, &request.effect) else {
+			last.label = format!(
+				"unknown effect `{}`; registered previews: {}",
+				request.effect,
+				registry.names().collect::<Vec<_>>().join(", ")
+			);
 			continue;
 		};
-		let (root, spawn) = burst(&mut commands, &library, &definition, &request);
+		let name = preview.definition.name.clone();
+		let (root, spawn) = preview.spawn(&mut commands, &request, &selection, &mut inspector);
 		if looping.0 {
 			repeating.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 			repeating.wait = 0.0;
@@ -69,7 +78,7 @@ pub fn apply_pending_shows(
 		last.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 		last.label = format!(
 			"{} · scale {:.2} · intensity {:.2} · playback {:.2} · d {:.1} · seed {}",
-			definition.name,
+			name,
 			request.scale,
 			request.intensity,
 			request.playback,
@@ -84,6 +93,9 @@ pub fn repeat_shown_effect(
 	mut commands: Commands,
 	time: Res<Time>,
 	library: Option<Res<VfxLibrary>>,
+	registry: Res<PreviewRecipes>,
+	selection: Res<PreviewSelection>,
+	mut inspector: ResMut<PreviewInspector>,
 	looping: Res<LoopEnabled>,
 	freeze: Res<PreviewFreeze>,
 	mut repeating: ResMut<RepeatingVfxShow>,
@@ -98,17 +110,18 @@ pub fn repeat_shown_effect(
 	let Some(request) = repeating.request.clone() else {
 		return;
 	};
-	let Some(definition) = library.get(&request.effect) else {
-		return;
-	};
+
 	// Completion follows actual readiness and manifest timing, including delayed layers.
 	if repeating.root.is_some_and(|root| instances.contains(root)) {
 		return;
 	}
 	repeating.wait += time.delta_secs();
 	if repeating.wait >= 0.45 {
+		let Some(preview) = preview(&registry, &library, &request.effect) else {
+			return;
+		};
 		repeating.wait = 0.0;
-		repeating.root = Some(burst(&mut commands, &library, &definition, &request).0);
+		repeating.root = Some(preview.spawn(&mut commands, &request, &selection, &mut inspector).0);
 	}
 }
 
@@ -128,41 +141,10 @@ pub fn pause_at_frozen_age(
 	}
 }
 
-fn burst(
-	commands: &mut Commands,
-	library: &VfxLibrary,
-	definition: &maybraid_vfx::EffectDefinition,
-	request: &VfxShowRequest,
-) -> (Entity, VfxSpawn) {
-	let origin = if definition.name == DUST { Vec3::ZERO } else { SHOW_ORIGIN };
-	let spawn = VfxSpawn {
-		intensity: request.intensity,
-		seed: request.seed,
-		playback: request.playback,
-		..default()
-	}
-	.resolved();
-	let transform = Transform::from_translation(origin + Vec3::Z * request.distance)
-		.with_scale(Vec3::splat(request.scale));
-	let root = match canonicalize_effect_name(&request.effect) {
-		Some(DUST) => commands
-			.spawn_scene(bsn! {
-				~{transform}
-				@{Effect::new(library.dust.clone()).with_spawn(spawn.clone())}
-			})
-			.id(),
-		Some(FIERY_EXPLOSION) => commands
-			.spawn_scene(bsn! {
-				~{transform}
-				@{Effect::new(library.fiery_explosion.clone()).with_spawn(spawn.clone())}
-			})
-			.id(),
-		_ => commands
-			.spawn_scene(bsn! {
-				~{transform}
-				@{Vfx { definition: definition.clone(), spawn: spawn.clone() }}
-			})
-			.id(),
-	};
-	(root, spawn)
+fn preview(registry: &PreviewRecipes, library: &VfxLibrary, name: &str) -> Option<PreviewEffect> {
+	registry.build(name).or_else(|| match canonicalize_effect_name(name) {
+		Some(DUST) => Some(PreviewEffect::typed(library.dust.clone())),
+		Some(FIERY_EXPLOSION) => Some(PreviewEffect::typed(library.fiery_explosion.clone())),
+		_ => library.get(name).map(PreviewEffect::definition),
+	})
 }
