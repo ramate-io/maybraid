@@ -40,10 +40,12 @@ For an artist who has just authored an effect in Houdini:
    [existing flipbook manifest](../../maybraid/assets/vfx/dust/rolling_wave.flipbook.json)
    for the required fields. New source hashes describe the new local inputs;
    they do not require a Git commit to exist first.
-5. Wire the new manifest into a `FlipbookPart` / `Dust` recipe and preview it in
+5. Use `FlipbookPart::new(FlipbookRef::path("vfx/your-effect.flipbook.json"))`
+   in a recipe and preview it in
    `vfx-playground`. Check frame order, alpha edges, view transitions, pivot,
    timing and ground intersections. The current `show dust` preset loads
-   `rolling_wave.flipbook.json`; it does not automatically discover new filenames.
+   `rolling_wave.flipbook.json`; other recipes can reference any direct manifest path
+   without a registry entry, preloaded handles, mesh allocation, or copied duration.
 6. Commit the validated KTX2, runtime manifest and provenance together. Archive
    Houdini projects, source renders and simulation caches separately as needed.
    A commit or archive reference can be added to provenance once it exists.
@@ -163,3 +165,15 @@ Related work: [flipbook export #1552](https://github.com/ramate-io/maybraid/issu
 [volume packaging #1553](https://github.com/ramate-io/maybraid/issues/1553),
 [typed loading #1554](https://github.com/ramate-io/maybraid/issues/1554), and
 [runtime integration #1555](https://github.com/ramate-io/maybraid/issues/1555).
+
+## Animated density sequences
+
+The shared `VolumeFlipbookPart` consumes time-ordered 3D density frames. See the
+[volume export contract](../../maybraid/vfx/VOLUME_FLIPBOOK.md). Each frame uses the
+same R16Float KTX2 layout as the static volumes above; all frames share one grid.
+`encode_volume` and `decode_volume` can pack and verify individual local frame grids.
+
+`python3 bin/vfx/generate_volume_fixture.py` regenerates the tiny analytic test
+sequence and provenance in `maybraid/assets/vfx/fixtures/volume_puffs`. This command
+has no source artwork or network inputs and is separate from the pinned dust
+migration scripts.

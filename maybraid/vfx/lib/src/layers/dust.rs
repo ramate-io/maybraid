@@ -6,7 +6,7 @@ use crate::composition::{EffectDefinition, EffectLayer, EffectRecipe, FlipbookPa
 use crate::names::DUST;
 
 /// Reusable dust layer: one capture-plane flipbook part plus timing/pose.
-#[derive(Component, Clone, Debug, Default)]
+#[derive(Component, Clone, Debug)]
 pub struct DustLayer {
 	pub part: FlipbookPart,
 	pub delay: f32,

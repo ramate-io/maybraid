@@ -12,6 +12,8 @@ use bevy::render::render_resource::{
 use bevy::shader::ShaderRef;
 
 use crate::composition::FlipbookPart;
+use crate::flipbook_ref::FlipbookRef;
+use crate::inspection::{VfxLayerInfo, VfxLoadFailure};
 use crate::membership::VfxMemberOf;
 use crate::parts::packaged::{AlphaConvention, PackagedFlipbook};
 use crate::spawn::{VfxInstance, VfxLayerLife, VfxSpawn};
@@ -23,36 +25,60 @@ impl FlipbookPart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-	) {
-		commands.spawn((
-			Name::new("vfx-layer-flipbook"),
-			ChildOf(parent),
-			VfxMemberOf(parent),
-			transform,
-			Visibility::Hidden,
-			NoFrustumCulling,
-			NotShadowCaster,
-			Mesh3d(self.mesh.clone()),
-			VfxDust {
-				flipbook: self.flipbook.clone(),
-				tint: spawn.tint_or_white(),
-				intensity: spawn.clamped_intensity(),
-			},
-			VfxLayerLife {
-				age: 0.0,
-				duration: self.duration,
-				playback: spawn.clamped_playback(),
-				waiting_for_emitter: true,
-			},
-		));
+	) -> Entity {
+		commands
+			.spawn((
+				Name::new("vfx-layer-flipbook"),
+				ChildOf(parent),
+				VfxMemberOf(parent),
+				transform,
+				Visibility::Hidden,
+				NoFrustumCulling,
+				NotShadowCaster,
+				VfxDust {
+					flipbook: self.flipbook.clone(),
+					tint: spawn.tint_or_white(),
+					intensity: spawn.clamped_intensity(),
+				},
+				VfxLayerLife {
+					age: 0.0,
+					duration: 0.0,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: true,
+				},
+			))
+			.id()
 	}
 }
 
 #[derive(Component)]
 pub struct VfxDust {
-	pub flipbook: Handle<PackagedFlipbook>,
+	pub flipbook: FlipbookRef,
 	pub tint: Color,
 	pub intensity: f32,
+}
+
+/// Resolved handle belongs to the runtime child, never the recipe or pending layer.
+#[derive(Component)]
+pub(crate) struct ResolvedFlipbook(pub Handle<PackagedFlipbook>);
+
+/// One standard proxy for all flipbook styles and instances in this world.
+#[derive(Resource, Default)]
+pub(crate) struct FlipbookProxyMesh(Option<Handle<Mesh>>);
+
+pub(crate) fn resolve_flipbooks(
+	mut commands: Commands,
+	server: Res<AssetServer>,
+	mut meshes: ResMut<Assets<Mesh>>,
+	mut proxy: ResMut<FlipbookProxyMesh>,
+	pending: Query<(Entity, &VfxDust), Without<ResolvedFlipbook>>,
+) {
+	for (entity, dust) in &pending {
+		let mesh = proxy.0.get_or_insert_with(|| meshes.add(Rectangle::default()));
+		commands
+			.entity(entity)
+			.try_insert((ResolvedFlipbook(dust.flipbook.load(&server)), Mesh3d(mesh.clone())));
+	}
 }
 
 /// One material per effect layer, never per sprite. The texture remains shared.
@@ -162,7 +188,9 @@ pub struct DustPlugin;
 impl Plugin for DustPlugin {
 	fn build(&self, app: &mut App) {
 		embedded_asset!(app, "flipbook_card/flipbook_card.wesl");
-		app.add_plugins(MaterialPlugin::<DustMaterial>::default());
+		app.add_message::<VfxLoadFailure>()
+			.init_resource::<FlipbookProxyMesh>()
+			.add_plugins(MaterialPlugin::<DustMaterial>::default());
 	}
 }
 
@@ -176,41 +204,55 @@ pub(crate) fn tick_dust(
 	images: Res<Assets<Image>>,
 	server: Res<AssetServer>,
 	mut materials: ResMut<Assets<DustMaterial>>,
+	mut failures: MessageWriter<VfxLoadFailure>,
 	mut dust: Query<(
 		Entity,
 		&VfxDust,
+		&ResolvedFlipbook,
 		&VfxMemberOf,
+		Option<&VfxLayerInfo>,
 		&mut VfxLayerLife,
 		&mut Visibility,
 		Option<&MeshMaterial3d<DustMaterial>>,
 	)>,
 ) {
-	for (entity, dust, member, mut life, mut visibility, material) in &mut dust {
-		if let Some((load, _, dependencies)) = server.get_load_states(dust.flipbook.id()) {
-			if matches!(load, LoadState::Failed(_))
-				|| matches!(dependencies, RecursiveDependencyLoadState::Failed(_))
-			{
-				warn!("dust asset failed to load; cancelling instance {:?}", member.root());
-				commands.entity(member.root()).try_despawn();
-				continue;
-			}
+	for (entity, dust, resolved, member, info, mut life, mut visibility, material) in &mut dust {
+		let report = |error: String| VfxLoadFailure {
+			root: member.root(),
+			effect: instances.get(member.root()).map(|v| v.name.clone()).unwrap_or_default(),
+			layer: info
+				.map(|v| format!("{} ({})", v.index, v.label))
+				.unwrap_or_else(|| "flipbook".into()),
+			path: dust.flipbook.path.clone(),
+			error,
+		};
+		let error = match server.get_load_states(resolved.0.id()) {
+			Some((LoadState::Failed(error), _, _)) => Some(error.to_string()),
+			Some((_, _, RecursiveDependencyLoadState::Failed(error))) => Some(error.to_string()),
+			_ => None,
+		};
+		if let Some(error) = error {
+			let failure = report(error);
+			warn!("{failure}");
+			failures.write(failure);
+			commands.entity(member.root()).try_despawn();
+			continue;
 		}
-		let Some(asset) = assets.get(&dust.flipbook) else {
+		let Some(asset) = assets.get(&resolved.0) else {
 			continue;
 		};
 		if !DustMaterial::supports(asset) {
-			warn!(
-				"dust requires evenly spaced views at one elevation; cancelling instance {:?}",
-				member.root()
-			);
+			let failure = report("renderer requires evenly spaced views at one elevation".into());
+			warn!("{failure}");
+			failures.write(failure);
 			commands.entity(member.root()).try_despawn();
 			continue;
 		}
 		if !images.contains(&asset.image) {
 			continue;
 		}
-		if server.get_load_states(dust.flipbook.id()).is_some()
-			&& !server.is_loaded_with_dependencies(dust.flipbook.id())
+		if server.get_load_states(resolved.0.id()).is_some()
+			&& !server.is_loaded_with_dependencies(resolved.0.id())
 		{
 			continue;
 		}

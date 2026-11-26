@@ -26,8 +26,7 @@ impl ParticlePart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-		layer_scale: f32,
-	) {
+	) -> Entity {
 		let count = (self.count * spawn.clamped_intensity()).clamp(1.0, self.capacity as f32);
 		let mut entity = commands.spawn((
 			Name::new(format!("vfx-layer-{}", self.name)),
@@ -36,7 +35,7 @@ impl ParticlePart {
 			transform,
 			Visibility::Inherited,
 			ParticleEffect::new(self.effect.clone()),
-			effect_properties(spawn, layer_scale, self.shade),
+			effect_properties(spawn, 1.0, self.shade),
 			VfxEmitter { count },
 			VfxLayerLife {
 				age: 0.0,
@@ -49,6 +48,19 @@ impl ParticlePart {
 		if !self.images.is_empty() {
 			entity.insert(EffectMaterial { images: self.images.clone() });
 		}
+		entity.id()
+	}
+}
+
+/// Global-space Hanabi transforms initial positions and velocities itself. Its
+/// billboard sizes and update accelerations need the world scale separately.
+/// Nonuniform transforms use the largest axis for these scalar quantities.
+pub(crate) fn sync_particle_scale(
+	mut particles: Query<(&GlobalTransform, &mut EffectProperties), With<VfxEmitter>>,
+) {
+	for (transform, mut properties) in &mut particles {
+		let scale = crate::spawn::visual_scale(transform);
+		properties.set(PROP_SCALE, scale.into());
 	}
 }
 
@@ -93,11 +105,11 @@ pub fn add_instance_properties(writer: &ExprWriter) -> InstanceExprs {
 
 pub fn effect_properties(
 	spawn: &VfxSpawn,
-	layer_scale: f32,
+	visual_scale: f32,
 	shade: ParticleShade,
 ) -> EffectProperties {
 	let mut properties = EffectProperties::default();
-	properties.set(PROP_SCALE, (spawn.scale * layer_scale).into());
+	properties.set(PROP_SCALE, visual_scale.into());
 	let tint = spawn.tint.map(LinearRgba::from).unwrap_or(LinearRgba::WHITE);
 	properties.set(PROP_TINT, Vec4::new(tint.red, tint.green, tint.blue, 1.0).into());
 	properties.set(PROP_SEED, seed::unit(spawn.resolved_seed()).into());

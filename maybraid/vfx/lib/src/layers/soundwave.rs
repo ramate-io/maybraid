@@ -110,11 +110,11 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) ->
 	let init_pos = SetPositionCircleModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
 		axis: writer.lit(Vec3::Y).expr(),
-		radius: (writer.lit(1.0) * props.scale.clone()).expr(),
+		radius: writer.lit(1.0).expr(),
 		dimension: ShapeDimension::Surface,
 	};
 	let init_vel =
-		init_along_negative_y(&writer, &props.scale, &props.playback, &props.seed, 0.35, 0.95);
+		init_along_negative_y(&writer, &writer.lit(1.0), &props.playback, &props.seed, 0.35, 0.95);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, WISP_LIFE_MIN, WISP_LIFE_MAX);
@@ -178,11 +178,11 @@ pub fn compile_streaks(effects: &mut Assets<EffectAsset>, spark: Handle<Image>) 
 	let init_pos = SetPositionCircleModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
 		axis: writer.lit(Vec3::Y).expr(),
-		radius: (writer.lit(1.0) * props.scale.clone()).expr(),
+		radius: writer.lit(1.0).expr(),
 		dimension: ShapeDimension::Surface,
 	};
 	let init_vel =
-		init_along_negative_y(&writer, &props.scale, &props.playback, &props.seed, 1.8, 4.6);
+		init_along_negative_y(&writer, &writer.lit(1.0), &props.playback, &props.seed, 1.8, 4.6);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, STREAK_LIFE_MIN, STREAK_LIFE_MAX);

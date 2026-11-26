@@ -4,9 +4,12 @@ use bevy::prelude::*;
 use bevy_hanabi::prelude::{CompiledParticleEffect, EffectSpawner, EffectSystems, SpawnerSettings};
 
 use crate::membership::{VfxInstanceMembers, VfxMemberOf};
-use crate::parts::flipbook_card::{tick_dust, VfxDust};
+use crate::parts::flipbook_card::{resolve_flipbooks, tick_dust, VfxDust};
 use crate::parts::lobe::{stamp_lobe_materials, tick_lobes};
-use crate::parts::soundwave::{stamp_soundwave_materials, tick_soundwaves};
+use crate::parts::particle::sync_particle_scale;
+use crate::parts::soundwave::{
+	stamp_soundwave_materials, sync_soundwave_placement, tick_soundwaves,
+};
 use crate::spawn::{
 	realize_layer, VfxEmitter, VfxEmitterArmed, VfxEmitterBurst, VfxFlash, VfxInstance,
 	VfxLayerLife, VfxPendingLayers,
@@ -34,15 +37,14 @@ pub fn gate_vfx_instances(
 	emitters: Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	mut spawners: Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
 	mut instances: Query<(Entity, &mut VfxInstance, &VfxInstanceMembers)>,
-	dust: Query<&VfxLayerLife, With<VfxDust>>,
+	asset_layers: Query<&VfxLayerLife, Or<(With<VfxDust>, With<crate::VfxVolumeFlipbook>)>>,
 ) {
 	for (_entity, mut instance, members) in &mut instances {
 		if !instance.armed {
 			if !members.emitters_ready(&emitters)
-				|| members
-					.iter()
-					.any(|entity| dust.get(entity).is_ok_and(|life| life.waiting_for_emitter))
-			{
+				|| members.iter().any(|entity| {
+					asset_layers.get(entity).is_ok_and(|life| life.waiting_for_emitter)
+				}) {
 				continue;
 			}
 			instance.armed = true;
@@ -66,17 +68,19 @@ pub fn tick_vfx_instances(
 		instance.age += dt * instance.playback;
 		let spawn = pending.spawn.clone();
 		let mut remain = Vec::new();
-		for layer in pending.layers.drain(..) {
+		let mut realized = false;
+		for (index, layer) in pending.layers.drain(..) {
 			if instance.age + 1e-4 >= layer.delay {
+				realized = true;
 				let actual_start = instance.age;
 				instance.duration = instance.duration.max(actual_start + layer.part_lifetime());
-				realize_layer(&mut commands, entity, &layer, &spawn);
+				realize_layer(&mut commands, entity, index, &layer, &spawn);
 			} else {
-				remain.push(layer);
+				remain.push((index, layer));
 			}
 		}
 		pending.layers = remain;
-		if pending.layers.is_empty() && members.layers_finished(&lives) {
+		if !realized && pending.layers.is_empty() && members.layers_finished(&lives) {
 			if instance.age >= instance.duration {
 				commands.entity(entity).try_despawn();
 			}
@@ -132,7 +136,25 @@ pub fn tick_vfx_layer_lives(
 	}
 }
 
+/// Point-light range is world-space; Bevy does not scale it with the entity.
+pub fn sync_flash_range(mut flashes: Query<(&GlobalTransform, &VfxFlash, &mut PointLight)>) {
+	for (transform, flash, mut light) in &mut flashes {
+		light.range = flash.range * crate::spawn::visual_scale(transform);
+	}
+}
+
 pub fn vfx_lifecycle_plugin(app: &mut App) {
+	app.add_systems(
+		PostUpdate,
+		(
+			sync_particle_scale.after(EffectSystems::UpdatePropertiesFromAsset),
+			sync_flash_range
+				.before(bevy::light::SimulationLightSystems::UpdateBounds)
+				.before(bevy::light::SimulationLightSystems::AssignLightsToClusters),
+			sync_soundwave_placement,
+		)
+			.after(bevy::transform::TransformSystems::Propagate),
+	);
 	app.add_systems(
 		PostUpdate,
 		(arm_vfx_emitters, gate_vfx_instances)
@@ -144,7 +166,10 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 		(
 			stamp_lobe_materials,
 			stamp_soundwave_materials,
+			resolve_flipbooks,
 			tick_dust,
+			crate::parts::volume_flipbook::resolve_volumes,
+			crate::parts::volume_flipbook::tick_volumes,
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_lobes,

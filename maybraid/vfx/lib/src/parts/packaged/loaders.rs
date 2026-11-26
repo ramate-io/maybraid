@@ -201,3 +201,64 @@ impl KtxHeader {
 		Ok(())
 	}
 }
+
+#[derive(Default, TypePath)]
+pub(crate) struct VolumeFlipbookLoader;
+
+impl AssetLoader for VolumeFlipbookLoader {
+	type Asset = crate::parts::packaged::PackagedVolumeFlipbook;
+	type Settings = ();
+	type Error = PackagedAssetError;
+
+	async fn load(
+		&self,
+		reader: &mut dyn Reader,
+		_: &(),
+		context: &mut LoadContext<'_>,
+	) -> Result<Self::Asset, Self::Error> {
+		let mut bytes = Vec::new();
+		reader.read_to_end(&mut bytes).await?;
+		let manifest = crate::parts::packaged::VolumeFlipbookManifest::from_json(&bytes)?;
+		let mut frames = Vec::with_capacity(manifest.frames.len());
+		for frame in &manifest.frames {
+			let path = context
+				.path()
+				.resolve_embed_str(frame)
+				.map_err(|e| PackagedAssetError::invalid(e.to_string()))?;
+			let bytes = context.read_asset_bytes(path.clone()).await?;
+			KtxHeader::parse(&bytes)?.validate_volume(&manifest.frame_manifest(frame))?;
+			// This part intentionally supports one mip. Verify decoded bytes before ImageLoader allocates.
+			let levels = u32::from_le_bytes(
+				bytes[40..44]
+					.try_into()
+					.map_err(|_| PackagedAssetError::invalid("missing mip count"))?,
+			);
+			let decoded = u64::from_le_bytes(
+				bytes[96..104]
+					.try_into()
+					.map_err(|_| PackagedAssetError::invalid("missing decoded size"))?,
+			);
+			if levels != 1
+				|| Some(decoded) != manifest.frame_manifest(frame).byte_len().map(|n| n as u64)
+			{
+				return Err(PackagedAssetError::invalid(format!(
+					"{frame}: expected one mip with exactly dimensions * 2 decoded bytes"
+				)));
+			}
+			frames.push(
+				context
+					.load_builder()
+					.with_settings(|settings: &mut ImageLoaderSettings| {
+						settings.sampler = KtxHeader::sampler();
+						settings.is_srgb = false;
+					})
+					.load(path),
+			);
+		}
+		Ok(Self::Asset { manifest, frames })
+	}
+
+	fn extensions(&self) -> &[&str] {
+		&["volume_flipbook.json"]
+	}
+}

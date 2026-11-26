@@ -25,11 +25,11 @@ pub fn compile(effects: &mut Assets<EffectAsset>, taper: Handle<Image>) -> Parti
 	let props = add_instance_properties(&writer);
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: (writer.lit(0.06) * props.scale.clone()).expr(),
+		radius: writer.lit(0.06).expr(),
 		dimension: ShapeDimension::Volume,
 	};
 	let init_vel =
-		init_radial_velocity(&writer, &props.scale, &props.playback, &props.seed, 3.5, 7.0);
+		init_radial_velocity(&writer, &writer.lit(1.0), &props.playback, &props.seed, 3.5, 7.0);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, SPARKS_LIFE_MIN, SPARKS_LIFE_MAX);

@@ -118,13 +118,12 @@ impl SoundwavePart {
 		parent: Entity,
 		transform: Transform,
 		spawn: &VfxSpawn,
-	) {
+	) -> Entity {
 		let heading = transform.rotation * Vec3::Y;
-		let radius = SOUNDWAVE_MAJOR * transform.scale.x.max(spawn.clamped_scale());
-		let thickness = SOUNDWAVE_MINOR * 2.0 * transform.scale.y.max(0.2);
-		// Parent sits at the instance origin; uniforms are world metres so the
-		// compression edge lines up with the gameplay wave / playground burst.
-		let world_origin = spawn.transform.translation + transform.translation;
+		let radius = SOUNDWAVE_MAJOR * transform.scale.x.abs().max(transform.scale.z.abs());
+		let thickness = SOUNDWAVE_MINOR * 2.0 * transform.scale.y.abs();
+		// Initial local values are synchronized to world space after propagation.
+		let world_origin = transform.translation;
 		let tint = spawn.tint.unwrap_or(Color::srgb(0.72, 0.88, 1.0));
 		let material = SoundwaveMaterial::new(
 			world_origin,
@@ -134,31 +133,32 @@ impl SoundwavePart {
 			tint,
 			spawn.clamped_intensity(),
 		);
-		let local = soundwave_transform(Vec3::ZERO, heading, radius, thickness);
-		commands.spawn((
-			Name::new(format!("vfx-soundwave-{}", self.name)),
-			ChildOf(parent),
-			VfxMemberOf(parent),
-			Mesh3d(self.mesh.clone()),
-			local,
-			Visibility::Inherited,
-			NotShadowCaster,
-			SoundwaveMaterialSlot(material),
-			VfxSoundwave {
-				origin: world_origin,
-				direction: heading,
-				radius,
-				thickness,
-				age: 0.0,
-				playback: spawn.clamped_playback(),
-			},
-			VfxLayerLife {
-				age: 0.0,
-				duration: self.duration,
-				playback: spawn.clamped_playback(),
-				waiting_for_emitter: false,
-			},
-		));
+		commands
+			.spawn((
+				Name::new(format!("vfx-soundwave-{}", self.name)),
+				ChildOf(parent),
+				VfxMemberOf(parent),
+				Mesh3d(self.mesh.clone()),
+				transform,
+				Visibility::Inherited,
+				NotShadowCaster,
+				SoundwaveMaterialSlot(material),
+				VfxSoundwave {
+					origin: world_origin,
+					direction: heading,
+					radius,
+					thickness,
+					age: 0.0,
+					playback: spawn.clamped_playback(),
+				},
+				VfxLayerLife {
+					age: 0.0,
+					duration: self.duration,
+					playback: spawn.clamped_playback(),
+					waiting_for_emitter: false,
+				},
+			))
+			.id()
 	}
 }
 
@@ -187,13 +187,12 @@ pub(crate) fn tick_soundwaves(
 	mut waves: Query<(
 		&VfxMemberOf,
 		&mut VfxSoundwave,
-		&mut Transform,
 		Option<&MeshMaterial3d<SoundwaveMaterial>>,
 		Option<&mut VfxLayerLife>,
 	)>,
 ) {
 	let dt = time.delta_secs();
-	for (member, mut wave, mut transform, material, life) in &mut waves {
+	for (member, mut wave, material, life) in &mut waves {
 		if !member.instance_armed(&instances) {
 			continue;
 		}
@@ -201,12 +200,31 @@ pub(crate) fn tick_soundwaves(
 		if let Some(mut life) = life {
 			life.age = wave.age;
 		}
-		*transform = soundwave_transform(Vec3::ZERO, wave.direction, wave.radius, wave.thickness);
 		if let Some(handle) = material {
 			if let Some(mut material) = materials.get_mut(&handle.0) {
-				material.follow(wave.origin, wave.direction, wave.radius, wave.thickness);
 				material.set_age(wave.age);
 			}
+		}
+	}
+}
+
+/// Material coordinates follow the full scene hierarchy without rewriting local placement.
+pub(crate) fn sync_soundwave_placement(
+	mut materials: ResMut<Assets<SoundwaveMaterial>>,
+	mut waves: Query<(&GlobalTransform, &mut VfxSoundwave, &MeshMaterial3d<SoundwaveMaterial>)>,
+) {
+	for (transform, mut wave, handle) in &mut waves {
+		let affine = transform.affine();
+		wave.origin = transform.translation();
+		wave.direction = affine.transform_vector3(Vec3::Y).normalize_or(Vec3::Y);
+		wave.radius = SOUNDWAVE_MAJOR
+			* affine
+				.transform_vector3(Vec3::X)
+				.length()
+				.max(affine.transform_vector3(Vec3::Z).length());
+		wave.thickness = SOUNDWAVE_MINOR * 2.0 * affine.transform_vector3(Vec3::Y).length();
+		if let Some(mut material) = materials.get_mut(&handle.0) {
+			material.follow(wave.origin, wave.direction, wave.radius, wave.thickness);
 		}
 	}
 }
@@ -272,5 +290,62 @@ mod tests {
 		assert!((axle - heading).length() < 1e-4);
 		assert!((pose.translation - front).length() < 1e-4);
 		assert!((pose.scale - Vec3::new(2.0, 1.0, 2.0)).length() < 1e-4);
+	}
+	#[test]
+	fn recipe_ring_keeps_local_pose_and_world_uniforms_follow_the_hierarchy(
+	) -> Result<(), Box<dyn std::error::Error>> {
+		use crate::composition::{EffectDefinition, EffectLayer};
+		use crate::spawn::{spawn_vfx, VfxInstance};
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default(), TransformPlugin))
+			.init_asset::<SoundwaveMaterial>()
+			.add_systems(Update, (stamp_soundwave_materials, tick_soundwaves).chain())
+			.add_systems(
+				PostUpdate,
+				sync_soundwave_placement.after(bevy::transform::TransformSystems::Propagate),
+			);
+		let local = Transform::from_xyz(1.0, 2.0, 3.0)
+			.with_rotation(Quat::from_rotation_z(0.5))
+			.with_scale(Vec3::splat(2.0));
+		let definition = EffectDefinition::new(
+			"ring",
+			[EffectLayer::soundwave(SoundwavePart {
+				name: "ring".into(),
+				mesh: default(),
+				duration: 1.0,
+			})
+			.with_transform(local)],
+		);
+		let root = spawn_vfx(&mut app.world_mut().commands(), &definition, default());
+		app.world_mut().flush();
+		let placement = Transform::from_xyz(5.0, 6.0, 7.0)
+			.with_rotation(Quat::from_rotation_y(0.7))
+			.with_scale(Vec3::splat(3.0));
+		app.world_mut().entity_mut(root).insert(placement);
+		app.world_mut()
+			.entity_mut(root)
+			.get_mut::<VfxInstance>()
+			.ok_or("missing instance")?
+			.armed = true;
+		app.update();
+		app.update();
+		let (transform, wave, material) = app
+			.world_mut()
+			.query::<(&Transform, &VfxSoundwave, &MeshMaterial3d<SoundwaveMaterial>)>()
+			.single(app.world())?;
+		assert_eq!(*transform, local);
+		let expected = placement.to_matrix() * local.to_matrix();
+		assert!(wave.origin.abs_diff_eq(expected.transform_point3(Vec3::ZERO), 1e-4));
+		assert!(wave
+			.direction
+			.abs_diff_eq(expected.transform_vector3(Vec3::Y).normalize(), 1e-4));
+		assert!((wave.radius - SOUNDWAVE_MAJOR * 6.0).abs() < 1e-4);
+		let material = app
+			.world()
+			.resource::<Assets<SoundwaveMaterial>>()
+			.get(&material.0)
+			.ok_or("missing material")?;
+		assert!(material.wave.truncate().abs_diff_eq(wave.origin, 1e-4));
+		Ok(())
 	}
 }

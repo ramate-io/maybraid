@@ -93,12 +93,12 @@ pub fn compile_wisps_kind(
 	let props = add_instance_properties(&writer);
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: (writer.lit(0.14) * props.scale.clone()).expr(),
+		radius: writer.lit(0.14).expr(),
 		dimension: ShapeDimension::Volume,
 	};
 	let init_vel = init_smoke_velocity(
 		&writer,
-		&props.scale,
+		&writer.lit(1.0),
 		&props.playback,
 		&props.seed,
 		SMOKE_OUTWARD_MIN,

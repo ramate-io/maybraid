@@ -5,6 +5,8 @@
 
 mod loaders;
 mod manifest;
+pub mod volume_flipbook;
+pub use volume_flipbook::{PackagedVolumeFlipbook, VolumeFlipbookManifest};
 
 pub use manifest::{
 	AlphaConvention, AzimuthRing, Bounds3, EndBehavior, FlipbookClock, FlipbookManifest,
@@ -55,6 +57,8 @@ impl Plugin for PackagedVfxPlugin {
 	fn build(&self, app: &mut App) {
 		app.init_asset::<PackagedFlipbook>()
 			.init_asset::<StaticVolume>()
+			.init_asset::<PackagedVolumeFlipbook>()
+			.init_asset_loader::<loaders::VolumeFlipbookLoader>()
 			.init_asset_loader::<loaders::FlipbookLoader>()
 			.init_asset_loader::<loaders::VolumeLoader>();
 	}

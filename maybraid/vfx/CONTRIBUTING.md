@@ -38,20 +38,24 @@ effect (named composite / recipe)
 | [`lib/src/parts.rs`](lib/src/parts.rs) | Spawned primitives and their assets / renderers | flipbook card, packaged KTX, mesh lobe, Hanabi particle, soundwave torus |
 | [`lib/src/composition.rs`](lib/src/composition.rs) | Graph schema | `EffectDefinition`, `EffectLayer`, `EffectPart`, `EffectRecipe` |
 
-Spawn typed recipes with `commands.spawn_scene(Effect { recipe, spawn })`, or
+Spawn typed recipes with `commands.spawn_scene(bsn! { Transform::from_translation(position) @{Effect::new(recipe)} })`, or
 the flattened `EffectDefinition` path through `VfxLibrary` and `spawn_vfx`.
 Recipes stay on the root for typed queries (`With<Dust>`). Runtime clocks live
-on `VfxInstance` and the part entities, not on the recipe.
+on `VfxInstance` and the part entities, not on the recipe. `VfxSpawn` only holds
+effect settings; root placement belongs to ECS `Transform`. Flipbook parts use
+`FlipbookRef::path` with no asset loading, proxy allocation, or duplicated timing
+in recipes. See the [authoring example](lib/README.md#authoring-and-placement).
 
 ### Parts
 
 A part is something a layer actually spawns. Keep the graph types
-(`FlipbookPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
+(`FlipbookPart`, `VolumeFlipbookPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
 so `EffectPart` stays one enum. Put spawn, tick, materials, and loaders next to
 the primitive:
 
 | `parts/` module | Graph type | Role |
 | --- | --- | --- |
+| `volume_flipbook` | `VolumeFlipbookPart` | Ray-marched animated 3D density, two interpolated KTX frames |
 | `flipbook_card` | `FlipbookPart` | Capture-plane renderer for packaged KTX |
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
 | `lobe` | `MeshPart` | Overlapping mesh volumes and `LobeMaterial` |

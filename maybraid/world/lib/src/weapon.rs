@@ -1,6 +1,7 @@
 //! Starter held kit for the vegetation player capsule.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::bsn;
 use character_inventory_user::{spawn_bag, InventoryUser};
 use character_items::{CharacterSheet, Inventory, InventoryItem, TanzId};
 use characters::{CharacterAppearance, CharacterRoot};
@@ -17,7 +18,7 @@ use maybraid_session::WorldGameplayEnabled;
 use maybraid_virtual_pad_controller::PrimaryVirtualPad;
 
 use maybraid_skill_map::{spawn_skill_maps, SkillMapEquip, SkillMapSystems};
-use maybraid_vfx::{EffectRecipe, SpawnVfxExt, VfxLibrary, VfxSpawn};
+use maybraid_vfx::{Effect, VfxLibrary, VfxSpawn};
 use player::{
 	apply_character_mobility, Player as MaybraidPlayer, PlayerCameraAim, PlayerLook, PlayerSystems,
 	PlayerVisual as MaybraidPlayerVisual, PlayerYawOwner,
@@ -266,17 +267,16 @@ fn spawn_detonation_vfx(
 		return;
 	};
 	for event in detonations.read() {
-		commands.spawn_vfx(
-			&library.fiery_explosion.effect_definition(),
-			VfxSpawn {
-				transform: Transform::from_translation(event.position),
-				scale: event.effect.scale,
+		let transform = Transform::from_translation(event.position).with_scale(Vec3::splat(event.effect.scale));
+		commands.spawn_scene(bsn! {
+			~{transform}
+			@{Effect::new(library.fiery_explosion.clone()).with_spawn(VfxSpawn {
 				intensity: event.effect.intensity,
 				playback: event.effect.playback,
 				seed: event.effect.seed,
 				..default()
-			},
-		);
+			})}
+		});
 	}
 }
 
@@ -1002,12 +1002,18 @@ mod tests {
 		use character_items::GrenadeStats;
 		use grenades::{GrenadeDetonated, GrenadeEffect};
 		use maybraid_vfx::{
-			Dust, DustLayer, EffectDefinition, FieryExplosion, FlipbookAsset, FlipbookPart,
-			LobeKind, MeshPart, ParticlePart, ParticleShade, Soundwave, VfxFlipbooks, VfxInstance,
-			VfxLibrary, FIERY_EXPLOSION,
+			Dust, EffectDefinition, FieryExplosion, FlipbookAsset, LobeKind, MeshPart,
+			ParticlePart, ParticleShade, Soundwave, VfxFlipbooks, VfxInstance, VfxLibrary,
+			FIERY_EXPLOSION,
 		};
 
-		let mut world = World::new();
+		let mut app = App::new();
+		app.add_plugins((
+			MinimalPlugins,
+			bevy::asset::AssetPlugin::default(),
+			bevy::scene::ScenePlugin,
+		));
+		let world = app.world_mut();
 		world.init_resource::<Messages<GrenadeDetonated>>();
 		let blank = EffectDefinition::new("stub", []);
 		fn blank_mesh() -> MeshPart {
@@ -1031,7 +1037,7 @@ mod tests {
 			}
 		}
 		world.insert_resource(VfxLibrary {
-			dust: Dust::new(DustLayer::new(FlipbookPart::default())),
+			dust: Dust::rolling_wave(),
 			flipbooks: VfxFlipbooks {
 				fire: FlipbookAsset {
 					image: Handle::default(),

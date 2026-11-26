@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::parts::packaged::PackagedFlipbook;
+use crate::flipbook_ref::FlipbookRef;
 
 /// Which explosion colors a particle layer samples from the instance palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,28 +125,33 @@ pub struct SoundwavePart {
 	pub duration: f32,
 }
 
-/// Shared packaged flipbook handle and proxy mesh. Duration is a fallback until the manifest loads.
-#[derive(Clone, Debug, Default)]
+/// Authored flipbook identity. The runtime supplies its mesh, handle, and manifest timing.
+#[derive(Clone, Debug)]
 pub struct FlipbookPart {
-	pub flipbook: Handle<PackagedFlipbook>,
-	pub mesh: Handle<Mesh>,
-	pub duration: f32,
+	pub flipbook: FlipbookRef,
 }
 
 impl FlipbookPart {
-	pub fn load(
-		server: &AssetServer,
-		path: impl Into<String>,
-		mesh: Handle<Mesh>,
-		duration: f32,
-	) -> Self {
-		Self { flipbook: server.load(path.into()), mesh, duration }
+	pub fn new(flipbook: impl Into<FlipbookRef>) -> Self {
+		Self { flipbook: flipbook.into() }
+	}
+}
+
+/// Deferred animated volume identity; renderer resources are supplied at realization.
+#[derive(Clone, Debug)]
+pub struct VolumeFlipbookPart {
+	pub flipbook: crate::VolumeFlipbookRef,
+}
+impl VolumeFlipbookPart {
+	pub fn new(flipbook: impl Into<crate::VolumeFlipbookRef>) -> Self {
+		Self { flipbook: flipbook.into() }
 	}
 }
 
 /// Concrete particle, light, mesh, or packaged flipbook variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
+	VolumeFlipbook(VolumeFlipbookPart),
 	Flipbook(FlipbookPart),
 	Particle(ParticlePart),
 	Light(LightPulse),
@@ -157,6 +162,8 @@ pub enum EffectPart {
 /// One timed piece of a composite: part, delay, local pose, scale.
 #[derive(Clone, Debug)]
 pub struct EffectLayer {
+	/// Optional author-facing label for diagnostics and the preview inspector.
+	pub name: Option<String>,
 	pub part: EffectPart,
 	pub delay: f32,
 	pub transform: Transform,
@@ -164,8 +171,59 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
+	pub fn volume_flipbook_path(path: impl Into<crate::VolumeFlipbookRef>) -> Self {
+		Self::volume_flipbook(VolumeFlipbookPart::new(path))
+	}
+	pub fn volume_flipbook(part: VolumeFlipbookPart) -> Self {
+		Self {
+			name: None,
+			part: EffectPart::VolumeFlipbook(part),
+			delay: 0.,
+			transform: Transform::IDENTITY,
+			scale: 1.,
+		}
+	}
+
+	/// A packaged flipbook needs only its asset-relative manifest path.
+	pub fn flipbook_path(path: impl Into<FlipbookRef>) -> Self {
+		Self::flipbook(FlipbookPart::new(path))
+	}
+
+	pub fn with_name(mut self, name: impl Into<String>) -> Self {
+		self.name = Some(name.into());
+		self
+	}
+
+	/// Replace translation while preserving rotation and axis scale.
+	pub fn with_translation(mut self, translation: Vec3) -> Self {
+		self.transform.translation = translation;
+		self
+	}
+
+	/// Replace rotation while preserving translation and axis scale.
+	pub fn with_rotation(mut self, rotation: Quat) -> Self {
+		self.transform.rotation = rotation;
+		self
+	}
+
+	pub fn into_group(self) -> EffectLayerGroup {
+		EffectLayerGroup::new([self])
+	}
+
+	pub fn label(&self) -> &str {
+		self.name.as_deref().unwrap_or_else(|| match &self.part {
+			EffectPart::Flipbook(part) => &part.flipbook.path,
+			EffectPart::VolumeFlipbook(part) => &part.flipbook.path,
+			EffectPart::Particle(part) => &part.name,
+			EffectPart::Light(_) => "light",
+			EffectPart::Mesh(part) => &part.name,
+			EffectPart::Soundwave(part) => &part.name,
+		})
+	}
+
 	pub fn flipbook(part: FlipbookPart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Flipbook(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -175,6 +233,7 @@ impl EffectLayer {
 
 	pub fn particle(part: ParticlePart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Particle(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -184,6 +243,7 @@ impl EffectLayer {
 
 	pub fn light(pulse: LightPulse) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Light(pulse),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -193,6 +253,7 @@ impl EffectLayer {
 
 	pub fn mesh(part: MeshPart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Mesh(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -202,6 +263,7 @@ impl EffectLayer {
 
 	pub fn soundwave(part: SoundwavePart) -> Self {
 		Self {
+			name: None,
 			part: EffectPart::Soundwave(part),
 			delay: 0.0,
 			transform: Transform::IDENTITY,
@@ -214,6 +276,7 @@ impl EffectLayer {
 		self
 	}
 
+	/// Uniform size multiplier, multiplied by `transform.scale`; does not move the layer.
 	pub fn with_scale(mut self, scale: f32) -> Self {
 		self.scale = scale;
 		self
@@ -230,7 +293,8 @@ impl EffectLayer {
 
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
-			EffectPart::Flipbook(part) => part.duration,
+			// Unknown until resolved; runtime layer life gates completion.
+			EffectPart::Flipbook(_) | EffectPart::VolumeFlipbook(_) => 0.0,
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,
@@ -239,45 +303,26 @@ impl EffectLayer {
 	}
 }
 
-/// Default per-instance scale clamp for standalone layers and composites.
-pub const DEFAULT_SCALE_MIN: f32 = 0.25;
-pub const DEFAULT_SCALE_MAX: f32 = 4.0;
-
-/// Per-definition scale clamp applied at spawn.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScaleBounds {
-	pub min: f32,
-	pub max: f32,
-}
-
-impl Default for ScaleBounds {
-	fn default() -> Self {
-		Self { min: DEFAULT_SCALE_MIN, max: DEFAULT_SCALE_MAX }
-	}
-}
-
 /// Ordered collection of layers forming a named composite.
 #[derive(Clone, Debug)]
 pub struct EffectDefinition {
 	pub name: String,
 	pub layers: Vec<EffectLayer>,
-	pub scale_bounds: ScaleBounds,
 }
 
 impl EffectDefinition {
+	pub fn from_groups(
+		name: impl Into<String>,
+		groups: impl IntoIterator<Item = EffectLayerGroup>,
+	) -> Self {
+		Self::new(name, groups.into_iter().flatten())
+	}
+
 	pub fn new(name: impl Into<String>, layers: impl IntoIterator<Item = EffectLayer>) -> Self {
-		Self {
-			name: name.into(),
-			layers: layers.into_iter().collect(),
-			scale_bounds: ScaleBounds::default(),
-		}
+		Self { name: name.into(), layers: layers.into_iter().collect() }
 	}
 
-	pub fn with_scale_bounds(mut self, bounds: ScaleBounds) -> Self {
-		self.scale_bounds = bounds;
-		self
-	}
-
+	/// Planned duration; flipbook lifetimes are filled from manifests at runtime.
 	pub fn duration(&self) -> f32 {
 		self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max)
 	}
@@ -287,3 +332,63 @@ impl EffectDefinition {
 pub trait EffectRecipe {
 	fn effect_definition(&self) -> EffectDefinition;
 }
+
+/// Reusable authored layers, flattened before spawning. Operations compose in call order.
+/// Uniform group scaling also scales offsets. Restricting it to a scalar avoids shear
+/// when composing rotated layers with nonuniform local scale.
+#[derive(Clone, Debug, Default)]
+pub struct EffectLayerGroup {
+	layers: Vec<EffectLayer>,
+}
+
+impl EffectLayerGroup {
+	pub fn new(layers: impl IntoIterator<Item = EffectLayer>) -> Self {
+		Self { layers: layers.into_iter().collect() }
+	}
+
+	pub fn from_groups(groups: impl IntoIterator<Item = Self>) -> Self {
+		Self::new(groups.into_iter().flatten())
+	}
+
+	/// Add a delay to every layer, preserving relative timing.
+	pub fn delayed(mut self, seconds: f32) -> Self {
+		for layer in &mut self.layers {
+			layer.delay += seconds;
+		}
+		self
+	}
+
+	pub fn translated(mut self, offset: Vec3) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation += offset;
+		}
+		self
+	}
+
+	pub fn rotated(mut self, rotation: Quat) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation = rotation * layer.transform.translation;
+			layer.transform.rotation = rotation * layer.transform.rotation;
+		}
+		self
+	}
+
+	pub fn scaled(mut self, scale: f32) -> Self {
+		for layer in &mut self.layers {
+			layer.transform.translation *= scale;
+			layer.scale *= scale;
+		}
+		self
+	}
+}
+
+impl IntoIterator for EffectLayerGroup {
+	type Item = EffectLayer;
+	type IntoIter = std::vec::IntoIter<EffectLayer>;
+	fn into_iter(self) -> Self::IntoIter {
+		self.layers.into_iter()
+	}
+}
+
+#[cfg(test)]
+mod tests;

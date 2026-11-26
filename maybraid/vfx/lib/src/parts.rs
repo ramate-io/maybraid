@@ -5,3 +5,5 @@ pub mod lobe;
 pub mod packaged;
 pub mod particle;
 pub mod soundwave;
+
+pub mod volume_flipbook;

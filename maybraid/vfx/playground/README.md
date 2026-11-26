@@ -31,8 +31,9 @@ The scene includes a warm reference ground, an occluding wall, and a box so orbi
 its 0.55 m capture-center offset is part of the asset. Use `freeze 0.8` and `orbit`
 to inspect its shape, or `spread` / repeated `show dust` commands to compare concurrent
 instances. Each instance has its own clock and material uniforms; the eight-view
-KTX2 texture is shared. `--scale` and `--playback` apply through the same effect API
-as the other presets. Playback ends at the last authored timestamp, 3.2 seconds.
+KTX2 texture and standard proxy mesh are shared. `--scale` supplies the root
+`Transform`; `--playback` is an effect setting. The preset constructs its recipe
+without runtime resources and resolves its manifest path only when realized. Playback ends at the last authored timestamp, 3.2 seconds.
 
 The dust interpolates adjacent times and neighboring azimuth captures in premultiplied
 linear color. Its views were authored at 20° elevation: orbiting horizontally is the
@@ -49,3 +50,57 @@ A new instance waits for its manifest and image dependencies before advancing. G
 pipeline compilation is asynchronous; a cold first show can still miss visible opening
 frames while its pipeline warms up. Replay with `reset` after the first load when
 comparing a particular frame; no guessed startup delay is applied.
+
+Repeating playback waits for actual instance completion, including asset readiness
+and delayed layers, then pauses 0.45 seconds before replaying. No duration metadata
+is duplicated in the recipe or playground.
+
+## Add a recipe and inspect its layers
+
+See the [migration guide](../MIGRATION.md) for a complete typed recipe example.
+Register its factory on your playground app (before or after adding the plugin):
+
+```rust,ignore
+use vfx_playground::VfxPreviewAppExt;
+app.register_vfx_preview("impact", || Impact { size: 0.8 });
+```
+
+Then use `/show impact`. Custom names match exactly and take precedence over builtin
+aliases. Factories run once per spawn/rebuild, and the spawned root keeps the typed
+recipe component. Registration is only for this preview host; game spawning still
+uses `Effect::new(recipe)` directly.
+
+The scrollable layer panel inspects the most recently spawned preview, including
+delayed layers. Use the mouse wheel over it to scroll; F1 hides both panels.
+It reports pending/loading/playing/finished and the flipbook's two interpolated
+frames. Completed state remains visible until the next preview. Load errors include
+recipe, layer index/label, manifest path, and dependency error, and stop replay.
+
+- `solo 1` — rebuild with only authored layer 1; clears mute selections.
+- `mute 0` — rebuild without layer 0. Indices stay those in the full definition.
+- `unsolo` / `unmute` — clear the corresponding selection and rebuild.
+- `pause`, then `step [seconds]` — advance once while staying paused (default 1/60 s).
+  Time steps are in simulation seconds; the effect's playback multiplier still applies.
+  This is forward simulation, not arbitrary seeking or GPU particle rewind.
+- `reset` — call the factory again with the last request's seed and current selection.
+- `show ...` — clear selections and preview the requested effect.
+- `reload` — request reloads of the preview's flipbook manifests and images. After
+  loading finishes, `reset` recreates the recipe and materials. Rust edits require
+  recompilation. No filesystem watcher or Rust hot-code loader is enabled.
+
+Solo and mute exclude layers before realization, including their lights and particles.
+They do not simply hide already-running entities. All preview controls use the shared
+VFX runtime; they introduce no game/world dependencies.
+
+## Animated volume preview
+
+`show volume-demo` loads a generated eight-frame 24³ density sequence. It uses the
+shared `VolumeFlipbookPart`, not a special dust renderer. See the
+[volume guide](../VOLUME_FLIPBOOK.md) for export details and the reproducible
+`volume_probe` example, including frame cost and GPU-readback captures.
+
+Use `view 0.1 4.8 0.2` to look down, `view 0.8 1.0 0.6` to look from inside the
+volume, and `view 2.4 1.6 3.2` to restore the default viewpoint. These commands stop
+automatic orbit. `screenshot /tmp/volume.png` captures through the renderer.
+Volume layers participate in the existing selection, playback, reload, and failure
+workflows; the inspector also reports their interpolated frame pair and decoded size.
