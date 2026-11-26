@@ -27,6 +27,7 @@ fn app() -> App {
 	let mut app = App::new();
 	app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin))
 		.init_asset::<maybraid_vfx::PackagedFlipbook>()
+		.init_asset::<maybraid_vfx::PackagedVolumeFlipbook>()
 		.init_resource::<PreviewInspector>()
 		.init_resource::<LoopEnabled>()
 		.add_message::<VfxLoadFailure>()

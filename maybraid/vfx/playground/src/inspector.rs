@@ -3,7 +3,8 @@ use bevy::prelude::*;
 use maybraid_vfx::membership::VfxMemberOf;
 use maybraid_vfx::spawn::{VfxLayerLife, VfxPendingLayers};
 use maybraid_vfx::{
-	EffectLayer, EffectPart, PackagedFlipbook, VfxInstance, VfxLayerInfo, VfxLoadFailure,
+	EffectLayer, EffectPart, PackagedFlipbook, PackagedVolumeFlipbook, VfxInstance, VfxLayerInfo,
+	VfxLoadFailure,
 };
 
 #[derive(Clone, Debug)]
@@ -20,6 +21,7 @@ impl LayerRow {
 			label: layer.label().to_owned(),
 			path: match &layer.part {
 				EffectPart::Flipbook(part) => Some(part.flipbook.path.clone()),
+				EffectPart::VolumeFlipbook(part) => Some(part.flipbook.path.clone()),
 				_ => None,
 			},
 			runtime_index,
@@ -57,6 +59,7 @@ pub(crate) fn inspect_preview(
 	nodes: Query<(Option<&VfxLayerLife>, Option<&Children>)>,
 	server: Res<AssetServer>,
 	assets: Res<Assets<PackagedFlipbook>>,
+	volumes: Res<Assets<PackagedVolumeFlipbook>>,
 	mut looping: ResMut<crate::commands::LoopEnabled>,
 ) {
 	for failure in failures.read() {
@@ -116,6 +119,21 @@ pub(crate) fn inspect_preview(
 			format!("playing {age:.3}/{duration:.3}s")
 		};
 		if !waiting {
+			if let Some(asset) = row
+				.path
+				.as_ref()
+				.and_then(|path| server.get_handle::<PackagedVolumeFlipbook>(path.clone()))
+				.and_then(|handle| volumes.get(&handle))
+			{
+				let clock = asset.manifest.clock_at(age);
+				row.status.push_str(&format!(
+					" · volume frame {:.0}→{:.0} ({:.2}) · {} KiB",
+					clock.frame_0,
+					clock.frame_1,
+					clock.fract,
+					asset.manifest.byte_len().unwrap_or(0) / 1024
+				));
+			}
 			if let Some(asset) = row
 				.path
 				.as_ref()

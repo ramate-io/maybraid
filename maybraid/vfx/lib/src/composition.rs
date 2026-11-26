@@ -137,9 +137,21 @@ impl FlipbookPart {
 	}
 }
 
+/// Deferred animated volume identity; renderer resources are supplied at realization.
+#[derive(Clone, Debug)]
+pub struct VolumeFlipbookPart {
+	pub flipbook: crate::VolumeFlipbookRef,
+}
+impl VolumeFlipbookPart {
+	pub fn new(flipbook: impl Into<crate::VolumeFlipbookRef>) -> Self {
+		Self { flipbook: flipbook.into() }
+	}
+}
+
 /// Concrete particle, light, mesh, or packaged flipbook variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
+	VolumeFlipbook(VolumeFlipbookPart),
 	Flipbook(FlipbookPart),
 	Particle(ParticlePart),
 	Light(LightPulse),
@@ -159,6 +171,19 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
+	pub fn volume_flipbook_path(path: impl Into<crate::VolumeFlipbookRef>) -> Self {
+		Self::volume_flipbook(VolumeFlipbookPart::new(path))
+	}
+	pub fn volume_flipbook(part: VolumeFlipbookPart) -> Self {
+		Self {
+			name: None,
+			part: EffectPart::VolumeFlipbook(part),
+			delay: 0.,
+			transform: Transform::IDENTITY,
+			scale: 1.,
+		}
+	}
+
 	/// A packaged flipbook needs only its asset-relative manifest path.
 	pub fn flipbook_path(path: impl Into<FlipbookRef>) -> Self {
 		Self::flipbook(FlipbookPart::new(path))
@@ -188,6 +213,7 @@ impl EffectLayer {
 	pub fn label(&self) -> &str {
 		self.name.as_deref().unwrap_or_else(|| match &self.part {
 			EffectPart::Flipbook(part) => &part.flipbook.path,
+			EffectPart::VolumeFlipbook(part) => &part.flipbook.path,
 			EffectPart::Particle(part) => &part.name,
 			EffectPart::Light(_) => "light",
 			EffectPart::Mesh(part) => &part.name,
@@ -268,7 +294,7 @@ impl EffectLayer {
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
 			// Unknown until resolved; runtime layer life gates completion.
-			EffectPart::Flipbook(_) => 0.0,
+			EffectPart::Flipbook(_) | EffectPart::VolumeFlipbook(_) => 0.0,
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,

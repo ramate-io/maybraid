@@ -119,3 +119,10 @@ The re-exported `EffectRecipe` derive accepts
 parameters and handwritten trait implementations remain supported. The derive adds
 no systems or registration requirements. See the playground's `VfxPreviewAppExt`
 for optional custom `/show` factories and layer inspection.
+
+## Animated 3D density
+
+`EffectLayer::volume_flipbook_path(path)` composes a true 3D animated density part.
+The existing capture-plane `FlipbookPart` remains available. See the
+[volume authoring/export guide](../VOLUME_FLIPBOOK.md) for the asset contract,
+rendering limits, lifecycle, and the isolated `volume-demo` preview.

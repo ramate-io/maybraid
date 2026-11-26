@@ -8,6 +8,7 @@ mod preview;
 pub use preview::{PreviewRecipes, VfxPreviewAppExt};
 mod show;
 mod ui;
+mod volume_demo;
 
 pub use commands::{PlaygroundCommand, PLAYGROUND_CLI_NAME};
 pub use game_commands::command::PendingStartupCommand;
@@ -26,7 +27,8 @@ pub struct VfxPlaygroundPlugin;
 
 impl Plugin for VfxPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.init_resource::<PreviewRecipes>()
+		app.register_vfx_preview("volume-demo", || volume_demo::VolumeDemo)
+			.init_resource::<PreviewRecipes>()
 			.init_resource::<preview::PreviewSelection>()
 			.init_resource::<preview::PreviewStep>()
 			.init_resource::<inspector::PreviewInspector>()

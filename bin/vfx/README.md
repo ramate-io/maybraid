@@ -165,3 +165,15 @@ Related work: [flipbook export #1552](https://github.com/ramate-io/maybraid/issu
 [volume packaging #1553](https://github.com/ramate-io/maybraid/issues/1553),
 [typed loading #1554](https://github.com/ramate-io/maybraid/issues/1554), and
 [runtime integration #1555](https://github.com/ramate-io/maybraid/issues/1555).
+
+## Animated density sequences
+
+The shared `VolumeFlipbookPart` consumes time-ordered 3D density frames. See the
+[volume export contract](../../maybraid/vfx/VOLUME_FLIPBOOK.md). Each frame uses the
+same R16Float KTX2 layout as the static volumes above; all frames share one grid.
+`encode_volume` and `decode_volume` can pack and verify individual local frame grids.
+
+`python3 bin/vfx/generate_volume_fixture.py` regenerates the tiny analytic test
+sequence and provenance in `maybraid/assets/vfx/fixtures/volume_puffs`. This command
+has no source artwork or network inputs and is separate from the pinned dust
+migration scripts.

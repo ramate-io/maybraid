@@ -37,15 +37,14 @@ pub fn gate_vfx_instances(
 	emitters: Query<(&VfxEmitter, Has<VfxEmitterArmed>, Has<VfxEmitterBurst>)>,
 	mut spawners: Query<Option<&mut EffectSpawner>, With<VfxEmitter>>,
 	mut instances: Query<(Entity, &mut VfxInstance, &VfxInstanceMembers)>,
-	dust: Query<&VfxLayerLife, With<VfxDust>>,
+	asset_layers: Query<&VfxLayerLife, Or<(With<VfxDust>, With<crate::VfxVolumeFlipbook>)>>,
 ) {
 	for (_entity, mut instance, members) in &mut instances {
 		if !instance.armed {
 			if !members.emitters_ready(&emitters)
-				|| members
-					.iter()
-					.any(|entity| dust.get(entity).is_ok_and(|life| life.waiting_for_emitter))
-			{
+				|| members.iter().any(|entity| {
+					asset_layers.get(entity).is_ok_and(|life| life.waiting_for_emitter)
+				}) {
 				continue;
 			}
 			instance.armed = true;
@@ -169,6 +168,8 @@ pub fn vfx_lifecycle_plugin(app: &mut App) {
 			stamp_soundwave_materials,
 			resolve_flipbooks,
 			tick_dust,
+			crate::parts::volume_flipbook::resolve_volumes,
+			crate::parts::volume_flipbook::tick_volumes,
 			tick_vfx_instances,
 			tick_vfx_flashes,
 			tick_lobes,

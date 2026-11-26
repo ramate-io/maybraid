@@ -291,6 +291,7 @@ pub fn realize_layer(
 	};
 	let entity = match &layer.part {
 		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
+		EffectPart::VolumeFlipbook(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();

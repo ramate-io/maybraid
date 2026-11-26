@@ -91,3 +91,16 @@ recipe, layer index/label, manifest path, and dependency error, and stop replay.
 Solo and mute exclude layers before realization, including their lights and particles.
 They do not simply hide already-running entities. All preview controls use the shared
 VFX runtime; they introduce no game/world dependencies.
+
+## Animated volume preview
+
+`show volume-demo` loads a generated eight-frame 24³ density sequence. It uses the
+shared `VolumeFlipbookPart`, not a special dust renderer. See the
+[volume guide](../VOLUME_FLIPBOOK.md) for export details and the reproducible
+`volume_probe` example, including frame cost and GPU-readback captures.
+
+Use `view 0.1 4.8 0.2` to look down, `view 0.8 1.0 0.6` to look from inside the
+volume, and `view 2.4 1.6 3.2` to restore the default viewpoint. These commands stop
+automatic orbit. `screenshot /tmp/volume.png` captures through the renderer.
+Volume layers participate in the existing selection, playback, reload, and failure
+workflows; the inspector also reports their interpolated frame pair and decoded size.

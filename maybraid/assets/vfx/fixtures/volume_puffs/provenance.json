@@ -1,0 +1,16 @@
+{
+  "generator": "bin/vfx/generate_volume_fixture.py",
+  "description": "Analytic moving compact-support puffs; generated test data, no source artwork",
+  "encoding": "linear R16_SFLOAT, X fastest, one mip, uncompressed KTX2",
+  "decoded_gpu_bytes": 221184,
+  "sha256": {
+    "frame_00.ktx2": "486b3b9454984380b98f5cd8fdd7cb40bd59a4013f08c6e7e529add7839dc2bf",
+    "frame_01.ktx2": "a1f95c2304a2bac709dffe265ceac9193429098ad89732eacd2741065f4e2522",
+    "frame_02.ktx2": "921c1a693ef684fd7808cfb544ca7a27c5901e8285d9114816b2c3aae5560427",
+    "frame_03.ktx2": "ac22dee0d80b237bf486e22f3b7f00082ceb22354cdc72e4427fe1dd121d43f8",
+    "frame_04.ktx2": "1557ea1454855a265b913ade8a14ffcf7a49144e16ebe34d3665c78607394bdb",
+    "frame_05.ktx2": "3d0b69d746ae651641635b9df1ade5e7310a330caf2688246737056fca10b5f9",
+    "frame_06.ktx2": "bceceada85f6a68ffcd6171f68ff85ef73c71216ff74d493535385487193cba0",
+    "frame_07.ktx2": "d6883740bac2e9b3901fac83f7154fefc37ca5a48da8c3c1af8f8d9531f95ab7"
+  }
+}

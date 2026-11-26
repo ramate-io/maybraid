@@ -23,6 +23,7 @@ pub mod palette;
 pub mod parts;
 pub mod seed;
 pub mod spawn;
+pub mod volume_flipbook_ref;
 
 pub use maybraid_vfx_macros::EffectRecipe;
 
@@ -30,6 +31,7 @@ pub use bevy_hanabi::prelude::EffectProperties;
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectLayerGroup, EffectPart, EffectRecipe, FlipbookPart,
 	LightPulse, LobeKind, LobeSpec, MeshPart, ParticlePart, ParticleShade, SoundwavePart,
+	VolumeFlipbookPart,
 };
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
@@ -45,16 +47,21 @@ pub use names::{DUST, FIERY_EXPLOSION, FIREBALL, FLASH, SMOKE, SOUNDWAVE, SPARKS
 pub use palette::ExplosionPalette;
 pub use parts::flipbook_card::{DustMaterial, DustPlugin, VfxDust};
 pub use parts::lobe::{LobeMaterial, LobeMaterialPlugin};
-pub use parts::packaged::{PackagedFlipbook, PackagedVfxPlugin, StaticVolume};
+pub use parts::packaged::{
+	PackagedFlipbook, PackagedVfxPlugin, PackagedVolumeFlipbook, StaticVolume,
+	VolumeFlipbookManifest,
+};
 pub use parts::particle::{FlipbookAsset, VfxFlipbooks};
 pub use parts::soundwave::{
 	soundwave_torus_mesh, soundwave_trail_transform, soundwave_transform, soundwave_wake_mesh,
 	soundwave_wake_transform, SoundwaveMaterial, SoundwaveMaterialPlugin, SOUNDWAVE_MAJOR,
 	SOUNDWAVE_MINOR, SOUNDWAVE_WAKE_ALONG,
 };
+pub use parts::volume_flipbook::{VfxVolumeFlipbook, VolumeFlipbookMaterial, VolumeFlipbookPlugin};
 pub use spawn::{
 	spawn_vfx, Effect, SpawnVfxExt, Vfx, VfxInstance, VfxSpawn, MAX_PLAYBACK, MIN_PLAYBACK,
 };
+pub use volume_flipbook_ref::VolumeFlipbookRef;
 
 use bevy::prelude::*;
 use bevy_hanabi::HanabiPlugin;
@@ -69,6 +76,9 @@ impl Plugin for VfxPlugin {
 	fn build(&self, app: &mut App) {
 		if !app.is_plugin_added::<PackagedVfxPlugin>() {
 			app.add_plugins(PackagedVfxPlugin);
+		}
+		if !app.is_plugin_added::<VolumeFlipbookPlugin>() {
+			app.add_plugins(VolumeFlipbookPlugin);
 		}
 		if !app.is_plugin_added::<DustPlugin>() {
 			app.add_plugins(DustPlugin);

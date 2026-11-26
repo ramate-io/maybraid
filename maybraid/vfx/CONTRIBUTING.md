@@ -49,12 +49,13 @@ in recipes. See the [authoring example](lib/README.md#authoring-and-placement).
 ### Parts
 
 A part is something a layer actually spawns. Keep the graph types
-(`FlipbookPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
+(`FlipbookPart`, `VolumeFlipbookPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
 so `EffectPart` stays one enum. Put spawn, tick, materials, and loaders next to
 the primitive:
 
 | `parts/` module | Graph type | Role |
 | --- | --- | --- |
+| `volume_flipbook` | `VolumeFlipbookPart` | Ray-marched animated 3D density, two interpolated KTX frames |
 | `flipbook_card` | `FlipbookPart` | Capture-plane renderer for packaged KTX |
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
 | `lobe` | `MeshPart` | Overlapping mesh volumes and `LobeMaterial` |

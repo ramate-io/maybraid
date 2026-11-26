@@ -87,6 +87,19 @@ pub enum PlaygroundCommand {
 	},
 	/// Reload the last preview's manifests and images; reset to rebuild materials afterward.
 	Reload,
+	/// Place the preview camera, looking at the burst origin (also supports inside views).
+	View {
+		#[arg(allow_hyphen_values = true)]
+		x: f32,
+		#[arg(allow_hyphen_values = true)]
+		y: f32,
+		#[arg(allow_hyphen_values = true)]
+		z: f32,
+	},
+	/// Save the rendered window via GPU readback.
+	Screenshot {
+		path: std::path::PathBuf,
+	},
 }
 
 /// Queued `/show` requests. Applied once [`maybraid_vfx::VfxLibrary`] exists.
@@ -243,10 +256,54 @@ impl PlaygroundCommand {
 								server.reload(image);
 							}
 						}
+						if let Some(asset) = server
+							.get_handle::<maybraid_vfx::PackagedVolumeFlipbook>(path.clone())
+							.and_then(|handle| {
+								world
+									.resource::<Assets<maybraid_vfx::PackagedVolumeFlipbook>>()
+									.get(&handle)
+							}) {
+							for frame in &asset.frames {
+								if let Some(image) = server.get_path(frame.id()) {
+									server.reload(image);
+								}
+							}
+						}
 						server.reload(path.clone());
 					}
 				});
 				*console = "reload requested; reset after loading to rebuild the recipe and materials (Rust edits require recompilation)".into();
+			}
+			Self::View { x, y, z } => {
+				commands.queue(move |world: &mut World| {
+					world.resource_mut::<CameraOrbit>().enabled = false;
+					let mut query =
+						world.query::<(&mut Transform, &mut crate::camera::CameraController)>();
+					for (mut transform, mut controller) in query.iter_mut(world) {
+						let position = Vec3::new(x, y, z);
+						if !position.is_finite() {
+							continue;
+						}
+						let direction = crate::show::SHOW_ORIGIN - position;
+						let target = if direction.length_squared() < 1e-6 {
+							position - Vec3::Z
+						} else {
+							crate::show::SHOW_ORIGIN
+						};
+						*transform =
+							Transform::from_translation(position).looking_at(target, Vec3::Y);
+						let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+						controller.yaw = yaw;
+						controller.pitch = pitch;
+					}
+				});
+				*console = format!("view {x} {y} {z}");
+			}
+			Self::Screenshot { path } => {
+				commands
+					.spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+					.observe(bevy::render::view::screenshot::save_to_disk(path));
+				*console = "screenshot queued (GPU readback)".into();
 			}
 			Self::Noloop => {
 				commands.queue(|world: &mut World| {
