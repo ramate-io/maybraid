@@ -1,7 +1,8 @@
 //! Discover skill maps: spatial tile walks and timed directional feeds driven
 //! by a [`SkillMapUser`]'s Laufer/Tanz stick flicks. Both modes hold **RB** to
-//! expand the stained-glass overlay; either stick works and a hold is not a
-//! flick. Tile claims and correctly timed feed prompts dispatch world effects.
+//! expand the stained-glass overlay into a circular lens (a clear window onto
+//! the world) with a 2D braid on the rim; either stick works and a hold is not
+//! a flick. Tile claims and correctly timed feed prompts dispatch world effects.
 //!
 //! Stamp [`SkillMapUser`] on the live character (same install as
 //! [`firearm_user::FirearmUser`]). Pause / text-entry should clear
@@ -17,6 +18,7 @@ mod fireball_embers;
 mod fireball_material;
 mod fireball_trail;
 mod icon;
+mod lens;
 mod map;
 mod overlay;
 mod preview;
@@ -50,11 +52,19 @@ pub use feed::{
 	FeedDirection, FeedState, FeedStepStatus, FEED_PAUSE_SECS, FEED_STEPS, FEED_STEP_SECS,
 	FEED_WINDOW_SECS,
 };
-pub use map::{authored_map, authored_map_from_spec, authored_maps, SkillKind, SkillMapId};
+pub use lens::{
+	OverlayBraidMotion, SkillMapOverlayLens, BRAID_AMP_FRAC, BRAID_STROKE_FRAC,
+	BRAID_TURN_PERIOD_UV, LENS_FILM_SECS, LENS_FLASH_SECS, LENS_POCKET_SCALE, LENS_RECURL_SECS,
+	LENS_RING_THICKNESS_FRAC, LENS_UNCURL_SECS,
+};
+pub use map::{
+	authored_map, authored_map_from_spec, authored_maps, AuthoredMap, SkillKind, SkillMapId,
+};
 pub use overlay::{
-	SkillMapBackdrop, SkillMapOverlay, SkillMapOverlayCue, SkillMapOverlayEnabled,
-	SkillMapOverlayMaterial, SkillMapOverlayPane, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA,
-	OVERLAY_GLASS, OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
+	spawn_overlay_pane, OverlayParams, SkillMapBackdrop, SkillMapLiveMap, SkillMapOverlay,
+	SkillMapOverlayCue, SkillMapOverlayEnabled, SkillMapOverlayMaterial, SkillMapOverlayPane,
+	SkillMapOverlayPlugin, OVERLAY_CLEAR_ALPHA, OVERLAY_FRAME_FILL_ALPHA, OVERLAY_GLASS,
+	OVERLAY_TILE_AMOUNT, OVERLAY_WARP,
 };
 pub use preview::{
 	spawn_skill_map_catalog_preview, spawn_skill_map_spin_reveal_hud,
@@ -65,7 +75,7 @@ pub use sound::{
 	SkillMapOverlaySounds, OVERLAY_ACTIVATE_SOUND, OVERLAY_ACTIVATE_SOUND_NAME,
 	OVERLAY_ACTIVATE_SPATIAL_RADIUS, OVERLAY_ACTIVATE_VOLUME,
 };
-pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterialPlugin};
+pub use tile_material::{SkillMapTileAssets, SkillMapTileMaterial, SkillMapTileMaterialPlugin};
 pub use tiles::{classify_noise, TileKind};
 pub use tunnel_vision::{
 	SkillMapFocusEnabled, SkillMapTunnelVision, SkillMapTunnelVisionMaterial, TUNNEL_VISION_DARKEN,
@@ -76,8 +86,9 @@ pub use user::{
 	SkillMapSession, SkillMapSteerLock, SkillMapUser, SkillMapUserSettings,
 };
 pub use viewport::{
-	spawn_skill_map_view, Debraid, SkillMapFirearmHud, SkillMapViewport, SkillMapViewportCamera,
-	SpawnedSkillMapView, SKILL_MAP_RB_ICON, SKILL_MAP_RT_ICON, SKILL_MAP_Y_ICON,
+	map_view_extent, spawn_skill_map_view, Debraid, SkillMapFirearmHud, SkillMapViewport,
+	SkillMapViewportCamera, SpawnedSkillMapView, SKILL_MAP_RB_ICON, SKILL_MAP_RT_ICON,
+	SKILL_MAP_Y_ICON,
 };
 
 /// When `false`, the map is hidden and claims / steering are ignored.
