@@ -75,11 +75,11 @@ pub fn compile_wisps(effects: &mut Assets<EffectAsset>, fire: &FlipbookAsset) ->
 	let props = add_instance_properties(&writer);
 	let init_pos = SetPositionSphereModifier {
 		center: writer.lit(Vec3::ZERO).expr(),
-		radius: (writer.lit(0.08) * props.scale.clone()).expr(),
+		radius: writer.lit(0.08).expr(),
 		dimension: ShapeDimension::Volume,
 	};
 	let init_vel =
-		init_radial_velocity(&writer, &props.scale, &props.playback, &props.seed, 1.2, 2.4);
+		init_radial_velocity(&writer, &writer.lit(1.0), &props.playback, &props.seed, 1.2, 2.4);
 	let init_age = SetAttributeModifier::new(Attribute::AGE, writer.lit(0.).expr());
 	let init_lifetime =
 		init_lifetime(&writer, &props.playback, &props.seed, FIREBALL_LIFE_MIN, FIREBALL_LIFE_MAX);

@@ -207,13 +207,8 @@ The following usage sketch combines the existing spawn call with proposed update
 
 ```rust
 // Existing Maybraid spawn interface, using the new effect definition.
-let instance = commands.spawn_vfx(
-    &dust_definition,
-    VfxSpawn {
-        transform: Transform::from_translation(position),
-        ..default()
-    },
-);
+let instance = commands.spawn_vfx(&dust_definition, VfxSpawn::default());
+commands.entity(instance).insert(Transform::from_translation(position));
 
 // Proposed API: apply shared settings and current world-space inputs.
 update_vfx(&mut commands, instance, &settings, &runtime_inputs);

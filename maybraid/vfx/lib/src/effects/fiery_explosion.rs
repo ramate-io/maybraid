@@ -2,15 +2,9 @@
 
 use bevy::prelude::*;
 
-use crate::composition::{
-	EffectDefinition, EffectLayer, EffectRecipe, MeshPart, ParticlePart, ScaleBounds,
-	DEFAULT_SCALE_MIN,
-};
+use crate::composition::{EffectDefinition, EffectLayer, EffectRecipe, MeshPart, ParticlePart};
 use crate::layers::{flash, smoke};
 use crate::names::FIERY_EXPLOSION;
-
-/// Large enough for street-sized grenade blasts without raising the generic VFX cap.
-pub const MAX_SCALE: f32 = 20.0;
 
 /// Authored fiery explosion recipe. Mutating this after spawn does not rebuild the instance.
 #[derive(Component, Clone, Debug)]
@@ -34,10 +28,6 @@ impl FieryExplosion {
 	) -> Self {
 		Self { flash_mesh, fireball_mesh, fireball_wisps, smoke_mesh, smoke_wisps, sparks_part }
 	}
-
-	pub fn scale_bounds() -> ScaleBounds {
-		ScaleBounds { min: DEFAULT_SCALE_MIN, max: MAX_SCALE }
-	}
 }
 
 impl EffectRecipe for FieryExplosion {
@@ -54,7 +44,6 @@ impl EffectRecipe for FieryExplosion {
 				EffectLayer::particle(self.sparks_part.clone()),
 			],
 		)
-		.with_scale_bounds(Self::scale_bounds())
 	}
 }
 
@@ -105,13 +94,5 @@ mod tests {
 		assert!(matches!(def.layers[1].part, EffectPart::Light(_)));
 		assert!((def.layers[4].delay - smoke::SMOKE_DELAY).abs() < 1e-4);
 		assert!((def.duration() - (smoke::SMOKE_DELAY + 2.4)).abs() < 1e-4);
-		assert_eq!(def.scale_bounds.max, MAX_SCALE);
-	}
-
-	#[test]
-	fn fiery_explosion_keeps_grenade_scale() {
-		let def = sample().effect_definition();
-		let spawn = crate::spawn::VfxSpawn { scale: 13.0, ..Default::default() }.resolved_for(&def);
-		assert!((spawn.scale - 13.0).abs() < 1e-4);
 	}
 }

@@ -9,6 +9,7 @@
 
 pub mod composition;
 pub mod effects;
+pub mod flipbook_ref;
 pub mod layers;
 pub mod library;
 pub mod lifecycle;
@@ -22,12 +23,12 @@ pub mod spawn;
 pub use bevy_hanabi::prelude::EffectProperties;
 pub use composition::{
 	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, FlipbookPart, LightPulse, LobeKind,
-	LobeSpec, MeshPart, ParticlePart, ParticleShade, ScaleBounds, SoundwavePart, DEFAULT_SCALE_MAX,
-	DEFAULT_SCALE_MIN,
+	LobeSpec, MeshPart, ParticlePart, ParticleShade, SoundwavePart,
 };
 pub use effects::dust::Dust;
 pub use effects::fiery_explosion::FieryExplosion;
 pub use effects::soundwave::Soundwave;
+pub use flipbook_ref::FlipbookRef;
 pub use layers::dust::DustLayer;
 pub use layers::soundwave::{
 	attach_soundwave_trail, fade_trail, SOUNDWAVE_STREAK_NAME, SOUNDWAVE_WISP_NAME,

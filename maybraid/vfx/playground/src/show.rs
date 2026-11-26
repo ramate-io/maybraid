@@ -1,9 +1,10 @@
 //! Apply queued `/show` requests through the crate spawn helper.
 
 use bevy::prelude::*;
+use bevy::scene::prelude::bsn;
 use game_commands::ui::GameCommandStatusText;
 use maybraid_vfx::{
-	canonicalize_effect_name, spawn_vfx, Effect, VfxLibrary, VfxSpawn, DUST, FIERY_EXPLOSION,
+	canonicalize_effect_name, Effect, Vfx, VfxLibrary, VfxSpawn, DUST, FIERY_EXPLOSION,
 };
 
 use crate::commands::{LoopEnabled, PendingVfxShows, PreviewFreeze, SpreadOnce, VfxShowRequest};
@@ -21,6 +22,7 @@ pub struct LastVfxShow {
 pub struct RepeatingVfxShow {
 	pub request: Option<VfxShowRequest>,
 	pub wait: f32,
+	pub root: Option<Entity>,
 }
 
 pub fn apply_pending_shows(
@@ -58,10 +60,11 @@ pub fn apply_pending_shows(
 		let Some(definition) = library.get(&request.effect) else {
 			continue;
 		};
-		let spawn = burst(&mut commands, &library, &definition, &request);
+		let (root, spawn) = burst(&mut commands, &library, &definition, &request);
 		if looping.0 {
 			repeating.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 			repeating.wait = 0.0;
+			repeating.root = Some(root);
 		}
 		last.request = Some(VfxShowRequest { seed: spawn.seed, ..request.clone() });
 		last.label = format!(
@@ -84,6 +87,7 @@ pub fn repeat_shown_effect(
 	looping: Res<LoopEnabled>,
 	freeze: Res<PreviewFreeze>,
 	mut repeating: ResMut<RepeatingVfxShow>,
+	instances: Query<(), With<maybraid_vfx::VfxInstance>>,
 ) {
 	if !looping.0 || freeze.age.is_some() {
 		return;
@@ -97,11 +101,14 @@ pub fn repeat_shown_effect(
 	let Some(definition) = library.get(&request.effect) else {
 		return;
 	};
+	// Completion follows actual readiness and manifest timing, including delayed layers.
+	if repeating.root.is_some_and(|root| instances.contains(root)) {
+		return;
+	}
 	repeating.wait += time.delta_secs();
-	let playback = request.playback.clamp(maybraid_vfx::MIN_PLAYBACK, maybraid_vfx::MAX_PLAYBACK);
-	if repeating.wait >= definition.duration() / playback + 0.45 {
+	if repeating.wait >= 0.45 {
 		repeating.wait = 0.0;
-		burst(&mut commands, &library, &definition, &request);
+		repeating.root = Some(burst(&mut commands, &library, &definition, &request).0);
 	}
 }
 
@@ -126,30 +133,36 @@ fn burst(
 	library: &VfxLibrary,
 	definition: &maybraid_vfx::EffectDefinition,
 	request: &VfxShowRequest,
-) -> VfxSpawn {
+) -> (Entity, VfxSpawn) {
 	let origin = if definition.name == DUST { Vec3::ZERO } else { SHOW_ORIGIN };
 	let spawn = VfxSpawn {
-		transform: Transform::from_translation(origin + Vec3::Z * request.distance),
-		scale: request.scale,
 		intensity: request.intensity,
 		seed: request.seed,
 		playback: request.playback,
 		..default()
 	}
-	.resolved_for(definition);
-	match canonicalize_effect_name(&request.effect) {
-		Some(DUST) => {
-			commands.spawn_scene(Effect { recipe: library.dust.clone(), spawn: spawn.clone() });
-		}
-		Some(FIERY_EXPLOSION) => {
-			commands.spawn_scene(Effect {
-				recipe: library.fiery_explosion.clone(),
-				spawn: spawn.clone(),
-			});
-		}
-		_ => {
-			spawn_vfx(commands, definition, spawn.clone());
-		}
-	}
-	spawn
+	.resolved();
+	let transform = Transform::from_translation(origin + Vec3::Z * request.distance)
+		.with_scale(Vec3::splat(request.scale));
+	let root = match canonicalize_effect_name(&request.effect) {
+		Some(DUST) => commands
+			.spawn_scene(bsn! {
+				~{transform}
+				@{Effect::new(library.dust.clone()).with_spawn(spawn.clone())}
+			})
+			.id(),
+		Some(FIERY_EXPLOSION) => commands
+			.spawn_scene(bsn! {
+				~{transform}
+				@{Effect::new(library.fiery_explosion.clone()).with_spawn(spawn.clone())}
+			})
+			.id(),
+		_ => commands
+			.spawn_scene(bsn! {
+				~{transform}
+				@{Vfx { definition: definition.clone(), spawn: spawn.clone() }}
+			})
+			.id(),
+	};
+	(root, spawn)
 }

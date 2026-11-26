@@ -58,7 +58,6 @@ pub fn canonicalize_effect_name(name: &str) -> Option<&'static str> {
 
 pub fn setup_vfx_library(
 	mut commands: Commands,
-	server: Res<AssetServer>,
 	mut images: ResMut<Assets<Image>>,
 	mut effects: ResMut<Assets<EffectAsset>>,
 	mut meshes: ResMut<Assets<Mesh>>,
@@ -79,7 +78,7 @@ pub fn setup_vfx_library(
 	let soundwave_wisps = soundwave::compile_wisps(&mut effects, flipbooks.spark.clone());
 	let soundwave_streaks = soundwave::compile_streaks(&mut effects, flipbooks.spark.clone());
 	let library = VfxLibrary {
-		dust: Dust::rolling_wave(&server, &mut meshes),
+		dust: Dust::rolling_wave(),
 		flash: flash::definition(flash_mesh.clone()),
 		fireball: fireball::definition(fireball_mesh.clone(), fireball_wisps.clone()),
 		smoke: smoke::definition(smoke_mesh.clone(), smoke_wisps.clone()),

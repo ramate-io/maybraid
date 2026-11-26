@@ -31,8 +31,9 @@ The scene includes a warm reference ground, an occluding wall, and a box so orbi
 its 0.55 m capture-center offset is part of the asset. Use `freeze 0.8` and `orbit`
 to inspect its shape, or `spread` / repeated `show dust` commands to compare concurrent
 instances. Each instance has its own clock and material uniforms; the eight-view
-KTX2 texture is shared. `--scale` and `--playback` apply through the same effect API
-as the other presets. Playback ends at the last authored timestamp, 3.2 seconds.
+KTX2 texture and standard proxy mesh are shared. `--scale` supplies the root
+`Transform`; `--playback` is an effect setting. The preset constructs its recipe
+without runtime resources and resolves its manifest path only when realized. Playback ends at the last authored timestamp, 3.2 seconds.
 
 The dust interpolates adjacent times and neighboring azimuth captures in premultiplied
 linear color. Its views were authored at 20° elevation: orbiting horizontally is the
@@ -49,3 +50,7 @@ A new instance waits for its manifest and image dependencies before advancing. G
 pipeline compilation is asynchronous; a cold first show can still miss visible opening
 frames while its pipeline warms up. Replay with `reset` after the first load when
 comparing a particular frame; no guessed startup delay is applied.
+
+Repeating playback waits for actual instance completion, including asset readiness
+and delayed layers, then pauses 0.45 seconds before replaying. No duration metadata
+is duplicated in the recipe or playground.

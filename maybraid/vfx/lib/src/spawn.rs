@@ -6,25 +6,25 @@ use bevy::prelude::*;
 use bevy::scene::prelude::{bsn, Scene};
 use bevy::scene::{ResolveContext, ResolveSceneError, SceneDependencies};
 
-use crate::composition::{
-	EffectDefinition, EffectLayer, EffectPart, EffectRecipe, ScaleBounds, DEFAULT_SCALE_MAX,
-	DEFAULT_SCALE_MIN,
-};
+use crate::composition::{EffectDefinition, EffectLayer, EffectPart, EffectRecipe};
 use crate::membership::VfxMemberOf;
 use crate::palette::ExplosionPalette;
 use crate::seed;
 
 pub const MAX_INTENSITY: f32 = 2.0;
-pub const MIN_SCALE: f32 = DEFAULT_SCALE_MIN;
-pub const MAX_SCALE: f32 = DEFAULT_SCALE_MAX;
 pub const MIN_PLAYBACK: f32 = 0.25;
 pub const MAX_PLAYBACK: f32 = 4.0;
+
+/// Scalar world extent for billboard size and light range. Axis lengths also
+/// handle mirrored, collapsed, and sheared transforms without decomposing rotation.
+pub(crate) fn visual_scale(transform: &GlobalTransform) -> f32 {
+	let axes = transform.affine().matrix3;
+	axes.x_axis.length().max(axes.y_axis.length()).max(axes.z_axis.length())
+}
 
 /// Per-instance overrides. Never mutates a shared Hanabi asset.
 #[derive(Clone, Debug)]
 pub struct VfxSpawn {
-	pub transform: Transform,
-	pub scale: f32,
 	pub intensity: f32,
 	/// 1.0 is the authored layer envelope. Higher plays the same ratios faster.
 	pub playback: f32,
@@ -38,27 +38,11 @@ pub struct VfxSpawn {
 
 impl Default for VfxSpawn {
 	fn default() -> Self {
-		Self {
-			transform: Transform::IDENTITY,
-			scale: 1.0,
-			intensity: 1.0,
-			playback: 1.0,
-			tint: None,
-			seed: None,
-			palette: None,
-		}
+		Self { intensity: 1.0, playback: 1.0, tint: None, seed: None, palette: None }
 	}
 }
 
 impl VfxSpawn {
-	pub fn clamped_scale(&self) -> f32 {
-		self.clamped_scale_for(ScaleBounds::default())
-	}
-
-	pub fn clamped_scale_for(&self, bounds: ScaleBounds) -> f32 {
-		self.scale.clamp(bounds.min, bounds.max)
-	}
-
 	pub fn clamped_intensity(&self) -> f32 {
 		self.intensity.clamp(0.25, MAX_INTENSITY)
 	}
@@ -82,21 +66,6 @@ impl VfxSpawn {
 	/// Clamp numeric overrides and fill a missing seed. Call once before spawn.
 	pub fn resolved(self) -> Self {
 		Self {
-			transform: self.transform,
-			scale: self.clamped_scale(),
-			intensity: self.clamped_intensity(),
-			playback: self.clamped_playback(),
-			tint: self.tint,
-			seed: Some(self.seed.unwrap_or_else(seed::generate)),
-			palette: self.palette,
-		}
-	}
-
-	/// Clamp using the target definition's scale bounds. Call once before spawn.
-	pub fn resolved_for(&self, definition: &EffectDefinition) -> Self {
-		Self {
-			transform: self.transform,
-			scale: self.clamped_scale_for(definition.scale_bounds),
 			intensity: self.clamped_intensity(),
 			playback: self.clamped_playback(),
 			tint: self.tint,
@@ -111,6 +80,17 @@ impl VfxSpawn {
 pub struct Effect<T> {
 	pub recipe: T,
 	pub spawn: VfxSpawn,
+}
+
+impl<T> Effect<T> {
+	pub fn new(recipe: T) -> Self {
+		Self { recipe, spawn: VfxSpawn::default() }
+	}
+
+	pub fn with_spawn(mut self, spawn: VfxSpawn) -> Self {
+		self.spawn = spawn;
+		self
+	}
 }
 
 impl<T: EffectRecipe + Component + Clone> Scene for Effect<T> {
@@ -146,14 +126,12 @@ impl Scene for Vfx {
 	) -> Result<(), ResolveSceneError> {
 		let prepared = PreparedVfx::new(&self.definition, self.spawn);
 		let name = prepared.name.clone();
-		let transform = prepared.transform;
 		let instance = prepared.instance.clone();
 		let pending = prepared.pending_component.clone();
 		let spawn = prepared.spawn.clone();
 		let immediate = prepared.immediate.clone();
 		bsn! {
 			template(move |_ctx| Ok(name.clone()))
-			~{transform}
 			Visibility::Visible
 			template(move |ctx| {
 				let parent = ctx.entity.id();
@@ -177,6 +155,7 @@ impl Scene for Vfx {
 
 /// Root of one spawned instance.
 #[derive(Clone, Component, Debug)]
+#[require(Transform, crate::membership::VfxInstanceMembers)]
 pub struct VfxInstance {
 	pub name: String,
 	pub age: f32,
@@ -200,6 +179,8 @@ pub struct VfxFlash {
 	pub age: f32,
 	pub fade: f32,
 	pub peak: f32,
+	/// Authored range, scaled from the propagated layer transform.
+	pub range: f32,
 	pub playback: f32,
 }
 
@@ -227,7 +208,6 @@ pub struct VfxLayerLife {
 
 struct PreparedVfx {
 	name: Name,
-	transform: Transform,
 	instance: VfxInstance,
 	pending_component: VfxPendingLayers,
 	spawn: VfxSpawn,
@@ -236,7 +216,7 @@ struct PreparedVfx {
 
 impl PreparedVfx {
 	fn new(definition: &EffectDefinition, spawn: VfxSpawn) -> Self {
-		let spawn = spawn.resolved_for(definition);
+		let spawn = spawn.resolved();
 		let mut pending = Vec::new();
 		let mut immediate = Vec::new();
 		for layer in &definition.layers {
@@ -248,11 +228,6 @@ impl PreparedVfx {
 		}
 		Self {
 			name: Name::new(format!("vfx-{}", definition.name)),
-			transform: Transform {
-				translation: spawn.transform.translation,
-				rotation: spawn.transform.rotation,
-				scale: Vec3::splat(spawn.scale),
-			},
 			instance: VfxInstance {
 				name: definition.name.clone(),
 				age: 0.0,
@@ -268,7 +243,7 @@ impl PreparedVfx {
 	}
 }
 
-/// Spawn a named definition at `spawn.transform`. Returns the root entity.
+/// Spawn a definition at identity. Insert a `Transform` on the returned root to place it.
 pub fn spawn_vfx(
 	commands: &mut Commands,
 	definition: &EffectDefinition,
@@ -279,7 +254,6 @@ pub fn spawn_vfx(
 	let root = commands
 		.spawn((
 			prepared.name,
-			prepared.transform,
 			Visibility::Visible,
 			prepared.instance,
 			prepared.pending_component,
@@ -292,7 +266,7 @@ pub fn spawn_vfx(
 	root
 }
 
-/// `Commands` extension: `commands.spawn_vfx(&library.fiery_explosion, VfxSpawn { .. })`.
+/// `Commands` extension for flattened definitions. Place the returned root with `Transform`.
 pub trait SpawnVfxExt {
 	fn spawn_vfx(&mut self, definition: &EffectDefinition, spawn: VfxSpawn) -> Entity;
 }
@@ -312,15 +286,15 @@ pub fn realize_layer(
 	let transform = Transform {
 		translation: layer.transform.translation,
 		rotation: layer.transform.rotation,
-		scale: Vec3::splat(layer.scale),
+		scale: layer.transform.scale * layer.scale,
 	};
 	match &layer.part {
 		EffectPart::Flipbook(part) => part.spawn(commands, parent, transform, spawn),
-		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn, layer.scale),
+		EffectPart::Particle(part) => part.spawn(commands, parent, transform, spawn),
 		EffectPart::Light(pulse) => {
 			let peak = pulse.peak_intensity * spawn.clamped_intensity();
 			let color = ExplosionPalette::color(spawn.palette().with_tint(spawn.tint).flash);
-			let range = pulse.range * spawn.scale * layer.scale;
+			let range = pulse.range;
 			commands.spawn((
 				Name::new("vfx-layer-flash"),
 				ChildOf(parent),
@@ -333,7 +307,13 @@ pub fn realize_layer(
 					shadow_maps_enabled: false,
 					..default()
 				},
-				VfxFlash { age: 0.0, fade: pulse.fade, peak, playback: spawn.clamped_playback() },
+				VfxFlash {
+					age: 0.0,
+					fade: pulse.fade,
+					peak,
+					playback: spawn.clamped_playback(),
+					range,
+				},
 				VfxLayerLife {
 					age: 0.0,
 					duration: pulse.fade,
@@ -357,21 +337,12 @@ mod tests {
 	};
 
 	#[test]
-	fn spawn_clamps_scale_intensity_and_playback() {
-		let spawn = VfxSpawn { scale: 99.0, intensity: 0.01, playback: 0.01, ..default() };
-		assert_eq!(spawn.clamped_scale(), MAX_SCALE);
+	fn spawn_clamps_intensity_and_playback() {
+		let spawn = VfxSpawn { intensity: 0.01, playback: 0.01, ..default() };
 		assert_eq!(spawn.clamped_intensity(), 0.25);
 		assert_eq!(spawn.clamped_playback(), MIN_PLAYBACK);
 		let fast = VfxSpawn { playback: 99.0, ..default() };
 		assert_eq!(fast.clamped_playback(), MAX_PLAYBACK);
-	}
-
-	#[test]
-	fn definition_bounds_override_generic_cap() {
-		let def = EffectDefinition::new("big", [])
-			.with_scale_bounds(ScaleBounds { min: MIN_SCALE, max: 20.0 });
-		let spawn = VfxSpawn { scale: 13.0, ..default() }.resolved_for(&def);
-		assert!((spawn.scale - 13.0).abs() < 1e-4);
 	}
 
 	#[test]
@@ -416,6 +387,10 @@ mod tests {
 		let spawn = VfxSpawn {
 			tint: Some(Color::srgb(0.2, 0.8, 1.0)),
 			seed: Some(7),
+			palette: Some(ExplosionPalette {
+				fire_hot: LinearRgba::new(0.1, 0.3, 0.9, 1.0),
+				..default()
+			}),
 			playback: 2.0,
 			..default()
 		}
@@ -424,6 +399,95 @@ mod tests {
 		assert!(props.get_stored(PROP_TINT).is_some());
 		assert!(props.get_stored(PROP_SEED).is_some());
 		assert!(props.get_stored(PROP_PLAYBACK).is_some());
-		assert!(props.get_stored(PROP_COLOR0).is_some());
+		assert_eq!(props.get_stored(PROP_COLOR0), Some(Vec4::new(0.1, 0.3, 0.9, 1.0).into()));
+	}
+}
+
+#[cfg(test)]
+mod placement_tests {
+	use crate::composition::{
+		EffectDefinition, EffectLayer, LightPulse, ParticlePart, ParticleShade,
+	};
+	use crate::lifecycle::sync_flash_range;
+	use crate::parts::particle::{sync_particle_scale, PROP_SCALE};
+	use crate::spawn::{Vfx, VfxEmitter, VfxFlash};
+	use bevy::prelude::*;
+	use bevy::scene::{prelude::bsn, ScenePlugin};
+	use bevy_hanabi::EffectProperties;
+
+	#[test]
+	fn particle_size_and_light_range_follow_composed_scale_without_changing_placement(
+	) -> Result<(), Box<dyn std::error::Error>> {
+		let mut app = App::new();
+		app.add_plugins((MinimalPlugins, AssetPlugin::default(), ScenePlugin, TransformPlugin))
+			.add_systems(
+				PostUpdate,
+				(sync_particle_scale, sync_flash_range)
+					.after(bevy::transform::TransformSystems::Propagate),
+			);
+		let particle = ParticlePart {
+			name: "sizing".into(),
+			effect: default(),
+			images: Vec::new(),
+			count: 1.0,
+			capacity: 1,
+			max_lifetime: 1.0,
+			shade: ParticleShade::Fire,
+		};
+		let local = Transform::from_xyz(1.0, 0.0, 0.0).with_scale(Vec3::splat(2.0));
+		let definition = EffectDefinition::new(
+			"sizing",
+			[
+				EffectLayer::particle(particle).with_transform(local).with_scale(0.5),
+				EffectLayer::light(LightPulse {
+					color: Color::WHITE,
+					peak_intensity: 1.0,
+					range: 4.0,
+					fade: 1.0,
+				})
+				.with_transform(local)
+				.with_scale(0.5),
+			],
+		);
+		let placement = Transform::from_xyz(2.0, 3.0, 4.0).with_scale(Vec3::splat(13.0));
+		let root = app
+			.world_mut()
+			.commands()
+			.spawn_scene(bsn! {
+				~{placement}
+				@{Vfx { definition, spawn: default() }}
+			})
+			.id();
+		app.world_mut().flush();
+		app.update();
+		assert_eq!(app.world().get::<Transform>(root), Some(&placement));
+		let properties = app
+			.world_mut()
+			.query_filtered::<&EffectProperties, With<VfxEmitter>>()
+			.single(app.world())?;
+		assert_eq!(properties.get_stored(PROP_SCALE), Some(13.0.into()));
+		let light = app
+			.world_mut()
+			.query_filtered::<&PointLight, With<VfxFlash>>()
+			.single(app.world())?;
+		assert_eq!(light.range, 52.0);
+		// A later ECS placement edit is reflected without mutating the authored root.
+		app.world_mut()
+			.entity_mut(root)
+			.get_mut::<Transform>()
+			.ok_or("missing placement")?
+			.scale = Vec3::splat(3.0);
+		app.update();
+		let properties = app
+			.world_mut()
+			.query_filtered::<&EffectProperties, With<VfxEmitter>>()
+			.single(app.world())?;
+		assert_eq!(properties.get_stored(PROP_SCALE), Some(3.0.into()));
+		let light = app
+			.world_mut()
+			.query_filtered::<&PointLight, With<VfxFlash>>()
+			.single(app.world())?;
+		assert_eq!(light.range, 12.0);
+		Ok(())
 	}
 }

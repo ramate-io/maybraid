@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_hanabi::EffectAsset;
 
-use crate::parts::packaged::PackagedFlipbook;
+use crate::flipbook_ref::FlipbookRef;
 
 /// Which explosion colors a particle layer samples from the instance palette.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,22 +125,15 @@ pub struct SoundwavePart {
 	pub duration: f32,
 }
 
-/// Shared packaged flipbook handle and proxy mesh. Duration is a fallback until the manifest loads.
-#[derive(Clone, Debug, Default)]
+/// Authored flipbook identity. The runtime supplies its mesh, handle, and manifest timing.
+#[derive(Clone, Debug)]
 pub struct FlipbookPart {
-	pub flipbook: Handle<PackagedFlipbook>,
-	pub mesh: Handle<Mesh>,
-	pub duration: f32,
+	pub flipbook: FlipbookRef,
 }
 
 impl FlipbookPart {
-	pub fn load(
-		server: &AssetServer,
-		path: impl Into<String>,
-		mesh: Handle<Mesh>,
-		duration: f32,
-	) -> Self {
-		Self { flipbook: server.load(path.into()), mesh, duration }
+	pub fn new(flipbook: impl Into<FlipbookRef>) -> Self {
+		Self { flipbook: flipbook.into() }
 	}
 }
 
@@ -230,7 +223,8 @@ impl EffectLayer {
 
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
-			EffectPart::Flipbook(part) => part.duration,
+			// Unknown until resolved; runtime layer life gates completion.
+			EffectPart::Flipbook(_) => 0.0,
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,
@@ -239,45 +233,19 @@ impl EffectLayer {
 	}
 }
 
-/// Default per-instance scale clamp for standalone layers and composites.
-pub const DEFAULT_SCALE_MIN: f32 = 0.25;
-pub const DEFAULT_SCALE_MAX: f32 = 4.0;
-
-/// Per-definition scale clamp applied at spawn.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ScaleBounds {
-	pub min: f32,
-	pub max: f32,
-}
-
-impl Default for ScaleBounds {
-	fn default() -> Self {
-		Self { min: DEFAULT_SCALE_MIN, max: DEFAULT_SCALE_MAX }
-	}
-}
-
 /// Ordered collection of layers forming a named composite.
 #[derive(Clone, Debug)]
 pub struct EffectDefinition {
 	pub name: String,
 	pub layers: Vec<EffectLayer>,
-	pub scale_bounds: ScaleBounds,
 }
 
 impl EffectDefinition {
 	pub fn new(name: impl Into<String>, layers: impl IntoIterator<Item = EffectLayer>) -> Self {
-		Self {
-			name: name.into(),
-			layers: layers.into_iter().collect(),
-			scale_bounds: ScaleBounds::default(),
-		}
+		Self { name: name.into(), layers: layers.into_iter().collect() }
 	}
 
-	pub fn with_scale_bounds(mut self, bounds: ScaleBounds) -> Self {
-		self.scale_bounds = bounds;
-		self
-	}
-
+	/// Planned duration; flipbook lifetimes are filled from manifests at runtime.
 	pub fn duration(&self) -> f32 {
 		self.layers.iter().map(EffectLayer::duration).fold(0.0, f32::max)
 	}

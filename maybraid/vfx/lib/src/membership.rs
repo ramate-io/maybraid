@@ -31,7 +31,7 @@ impl VfxMemberOf {
 }
 
 /// All runtime parts registered for one [`VfxInstance`].
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 #[relationship_target(relationship = VfxMemberOf)]
 pub struct VfxInstanceMembers(Vec<Entity>);
 
@@ -59,17 +59,15 @@ impl VfxInstanceMembers {
 	}
 
 	fn layers_finished_with(&self, mut life: impl FnMut(Entity) -> Option<VfxLayerLife>) -> bool {
-		let mut saw = false;
 		for member in self.iter() {
 			let Some(life) = life(member) else {
 				continue;
 			};
-			saw = true;
 			if life.waiting_for_emitter || life.age + 1e-3 < life.duration {
 				return false;
 			}
 		}
-		saw
+		true
 	}
 }
 
