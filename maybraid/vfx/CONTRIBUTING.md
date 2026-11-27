@@ -49,12 +49,13 @@ in recipes. See the [authoring example](lib/README.md#authoring-and-placement).
 ### Parts
 
 A part is something a layer actually spawns. Keep the graph types
-(`FlipbookPart`, `VolumeFlipbookPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
+(`FlipbookPart`, `VolumeFlipbookPart`, `MeshClipPart`, `MeshPart`, `ParticlePart`, `LightPulse`) in `composition.rs`
 so `EffectPart` stays one enum. Put spawn, tick, materials, and loaders next to
 the primitive:
 
 | `parts/` module | Graph type | Role |
 | --- | --- | --- |
+| `mesh_clip` | `MeshClipPart` | Bounded offline mesh pose tracks, opaque palette/rest-coordinate dissolution |
 | `volume_flipbook` | `VolumeFlipbookPart` | Ray-marched animated 3D density, two interpolated KTX frames |
 | `flipbook_card` | `FlipbookPart` | Capture-plane renderer for packaged KTX |
 | `packaged` | assets for `FlipbookPart` | `.flipbook.json` / `.volume.json` loaders and manifests |
@@ -128,3 +129,17 @@ cargo test -p maybraid-vfx
 cargo test -p vfx-playground
 cargo run -p vfx-playground -- show dust
 ```
+
+`EffectLayer::mesh_clip_path` loads a `.mesh_clip.json` through AssetServer. It
+uses existing GLB mesh paths with sampled translation, quaternion, positive scale
+and dissolve cutoff. The manifest supplies the palette/light convention and
+per-track seed/birth/lifetime; interpolation is linear with quaternion slerp.
+The loader bounds tracks/samples and validates timing, paths and finite poses.
+It waits for all mesh dependencies before arming; only clocks/material parameters
+are per instance. This surface part does not provide filled interior density.
+
+Mesh-clip palette RGB is multiplied by the player's spawn tint (converted to linear
+RGB) and clamped intensity. Tint alpha is ignored; retained fragments stay opaque.
+The alpha-mask pipeline ensures the custom dissolve fragment runs in DepthPrepass;
+forward and depth shaders share rest-coordinate discard and vertex placement.
+Shadow rendering remains disabled. Appearance/materials are independent per instance.

@@ -47,7 +47,9 @@ impl PreviewEffect {
 		selection: &PreviewSelection,
 		inspector: &mut PreviewInspector,
 	) -> (Entity, VfxSpawn) {
-		let origin = if self.definition.name == maybraid_vfx::DUST {
+		let origin = if self.definition.name == maybraid_vfx::DUST
+			|| self.definition.name == "cartoon-dust"
+		{
 			Vec3::ZERO
 		} else {
 			crate::show::SHOW_ORIGIN
