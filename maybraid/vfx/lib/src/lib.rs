@@ -77,6 +77,9 @@ impl Plugin for VfxPlugin {
 		if !app.is_plugin_added::<PackagedVfxPlugin>() {
 			app.add_plugins(PackagedVfxPlugin);
 		}
+		if !app.is_plugin_added::<parts::mesh_clip::MeshClipPlugin>() {
+			app.add_plugins(parts::mesh_clip::MeshClipPlugin);
+		}
 		if !app.is_plugin_added::<VolumeFlipbookPlugin>() {
 			app.add_plugins(VolumeFlipbookPlugin);
 		}

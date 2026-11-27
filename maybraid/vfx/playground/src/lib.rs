@@ -16,6 +16,7 @@ pub use game_commands::command::PendingStartupCommand;
 use bevy::prelude::*;
 use game_commands::command::GameCommandPlugin;
 use ground::setup_ground;
+use maybraid_vfx::effects::cartoon_dust::CartoonDust;
 use maybraid_vfx::VfxPlugin;
 use show::{
 	apply_pending_shows, pause_at_frozen_age, repeat_shown_effect, LastVfxShow, RepeatingVfxShow,
@@ -27,7 +28,8 @@ pub struct VfxPlaygroundPlugin;
 
 impl Plugin for VfxPlaygroundPlugin {
 	fn build(&self, app: &mut App) {
-		app.register_vfx_preview("volume-demo", || volume_demo::VolumeDemo)
+		app.register_vfx_preview("cartoon-dust", || CartoonDust)
+			.register_vfx_preview("volume-demo", || volume_demo::VolumeDemo)
 			.init_resource::<PreviewRecipes>()
 			.init_resource::<preview::PreviewSelection>()
 			.init_resource::<preview::PreviewStep>()

@@ -1,0 +1,19 @@
+{
+  "reference_commit": "070e97eed4d94c8c06377c2286ce89895d38d696",
+  "seed": 13,
+  "method": "Native Puff::table/state samples at 240 Hz; existing byte-identical GLB meshes; rest-coordinate dissolution and palette",
+  "fps": 240,
+  "frames": 289,
+  "duration_s": 1.2,
+  "tracks": 16,
+  "source_mesh_sha256": {
+    "Shoulder": "52f1c1a45169266ea21716cf88170909bad753545fb10d441023825723b3e8c6",
+    "Column": "640f58bb7a7dbdbbea356ecbe4b27204477ac41fc2bfca4c8c9d31c5ba1b0532",
+    "Swept": "fc2ad6c2fa123323858b38a74cae2e0b47ab3bf20c82e43b6d3e16fdb8223c4e"
+  },
+  "clip_sha256": "952c58ec2b42dd468eae03c058a2dd019369b69820fa8bd587605e9ec176c8c9",
+  "commands": [
+    "python3 bin/vfx/export_cartoon_reference.py --reference-checkout \"$REFERENCE\" --output target/cartoon-export --samples-only",
+    "python3 bin/vfx/package_cartoon.py --reference-checkout \"$REFERENCE\" --input target/cartoon-export/landing.mesh_clip.json"
+  ]
+}

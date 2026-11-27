@@ -148,9 +148,16 @@ impl VolumeFlipbookPart {
 	}
 }
 
+/// Offline sampled mesh poses with rest-coordinate opaque dissolution.
+#[derive(Clone, Debug)]
+pub struct MeshClipPart {
+	pub path: String,
+}
+
 /// Concrete particle, light, mesh, or packaged flipbook variant owned by a layer.
 #[derive(Clone, Debug)]
 pub enum EffectPart {
+	MeshClip(MeshClipPart),
 	VolumeFlipbook(VolumeFlipbookPart),
 	Flipbook(FlipbookPart),
 	Particle(ParticlePart),
@@ -171,6 +178,15 @@ pub struct EffectLayer {
 }
 
 impl EffectLayer {
+	pub fn mesh_clip_path(path: impl Into<String>) -> Self {
+		Self {
+			name: None,
+			part: EffectPart::MeshClip(MeshClipPart { path: path.into() }),
+			delay: 0.,
+			transform: Transform::IDENTITY,
+			scale: 1.,
+		}
+	}
 	pub fn volume_flipbook_path(path: impl Into<crate::VolumeFlipbookRef>) -> Self {
 		Self::volume_flipbook(VolumeFlipbookPart::new(path))
 	}
@@ -212,6 +228,7 @@ impl EffectLayer {
 
 	pub fn label(&self) -> &str {
 		self.name.as_deref().unwrap_or_else(|| match &self.part {
+			EffectPart::MeshClip(part) => &part.path,
 			EffectPart::Flipbook(part) => &part.flipbook.path,
 			EffectPart::VolumeFlipbook(part) => &part.flipbook.path,
 			EffectPart::Particle(part) => &part.name,
@@ -294,7 +311,9 @@ impl EffectLayer {
 	pub fn part_lifetime(&self) -> f32 {
 		match &self.part {
 			// Unknown until resolved; runtime layer life gates completion.
-			EffectPart::Flipbook(_) | EffectPart::VolumeFlipbook(_) => 0.0,
+			EffectPart::Flipbook(_) | EffectPart::VolumeFlipbook(_) | EffectPart::MeshClip(_) => {
+				0.0
+			}
 			EffectPart::Particle(part) => part.max_lifetime,
 			EffectPart::Light(pulse) => pulse.fade,
 			EffectPart::Mesh(part) => part.duration,

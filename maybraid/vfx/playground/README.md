@@ -104,3 +104,65 @@ volume, and `view 2.4 1.6 3.2` to restore the default viewpoint. These commands 
 automatic orbit. `screenshot /tmp/volume.png` captures through the renderer.
 Volume layers participate in the existing selection, playback, reload, and failure
 workflows; the inspector also reports their interpolated frame pair and decoded size.
+
+## CartoonDust
+
+```sh
+cargo run --locked -p vfx-playground -- show cartoon-dust --seed 13
+```
+
+`effects::cartoon_dust::CartoonDust` plays a 1.2-second landing clip with 16
+mesh tracks sampled at 240 Hz. It reuses the existing body GLBs through the shared
+`MeshClipPart`. Use `noloop` for a single playback; the usual camera, pause,
+reset, selection and cancellation controls apply.
+
+Spawn the recipe through the VFX scene API:
+
+```rust
+use bevy::{prelude::*, scene::prelude::bsn};
+use maybraid_vfx::{effects::cartoon_dust::CartoonDust, Effect, VfxSpawn};
+
+commands.spawn_scene(bsn! {
+    ~{Transform::from_xyz(2.0, 0.0, 4.0)}
+    @{Effect::new(CartoonDust).with_spawn(VfxSpawn {
+        intensity: 1.0,
+        ..default()
+    })}
+});
+```
+
+Root and layer transforms control placement. Each instance owns its clock and
+materials; clips and meshes are shared. Appearance multiplies the authored linear
+RGB palette by instance tint RGB and clamped intensity. Tint alpha is ignored;
+retained fragments are opaque. The same dissolve mask writes forward and prepass
+depth. Add `DepthPrepass` to cameras combining the mesh with volume effects.
+
+The arrangement is baked from seed 13. Dissolve cuts are uncapped, lighting uses
+an authored direction, and instance seeds do not regenerate the animation.
+
+### Offline export
+
+The exporter requires a reference checkout at
+`070e97eed4d94c8c06377c2286ce89895d38d696` and its pinned Rust toolchain.
+The selected packaging path uses Python's standard library.
+
+```sh
+REFERENCE="/path/to/reference checkout"
+python3 bin/vfx/export_cartoon_reference.py --reference-checkout "$REFERENCE" --output target/cartoon-export --samples-only
+python3 bin/vfx/package_cartoon.py --reference-checkout "$REFERENCE" --input target/cartoon-export/landing.mesh_clip.json
+```
+
+The exporter validates the commit and resolves library artifacts from Cargo build
+output. `--target-dir PATH` overrides the Cargo build directory. Packaging verifies
+the reused meshes; `--output-dir PATH` stages a separate package. Runtime playback
+loads the committed clip and meshes through AssetServer.
+
+For native regression captures, run `cartoon_probe`, `cartoon_instances`, or
+`cartoon_prepass` with an output directory:
+
+```sh
+cargo run --locked -p vfx-playground --example cartoon_prepass -- /tmp/cartoon-prepass
+```
+
+The examples check animation phases, ownership cleanup and volume occlusion.
+They use inspection clocks and provide no performance benchmark.

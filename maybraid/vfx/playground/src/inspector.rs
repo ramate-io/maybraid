@@ -20,6 +20,7 @@ impl LayerRow {
 		Self {
 			label: layer.label().to_owned(),
 			path: match &layer.part {
+				EffectPart::MeshClip(part) => Some(part.path.clone()),
 				EffectPart::Flipbook(part) => Some(part.flipbook.path.clone()),
 				EffectPart::VolumeFlipbook(part) => Some(part.flipbook.path.clone()),
 				_ => None,
