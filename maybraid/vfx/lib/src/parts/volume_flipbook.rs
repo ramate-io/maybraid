@@ -34,7 +34,17 @@ impl VolumeFlipbookPart {
 				NotShadowCaster,
 				VfxVolumeFlipbook {
 					flipbook: self.flipbook.clone(),
-					tint: spawn.tint_or_white(),
+					tint: {
+						let a = self.tint.to_linear();
+						let b = spawn.tint_or_white().to_linear();
+						Color::linear_rgba(
+							a.red * b.red,
+							a.green * b.green,
+							a.blue * b.blue,
+							a.alpha * b.alpha,
+						)
+					},
+					illumination: self.illumination,
 					intensity: spawn.clamped_intensity(),
 					started: false,
 				},
@@ -51,6 +61,7 @@ impl VolumeFlipbookPart {
 
 #[derive(Component)]
 pub struct VfxVolumeFlipbook {
+	pub illumination: Vec4,
 	pub flipbook: VolumeFlipbookRef,
 	pub tint: Color,
 	pub intensity: f32,
@@ -79,6 +90,8 @@ pub(crate) fn resolve_volumes(
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct VolumeFlipbookMaterial {
+	#[uniform(9)]
+	pub illumination: Vec4,
 	#[texture(0, dimension = "3d")]
 	#[sampler(1)]
 	pub frame_a: Handle<Image>,
@@ -104,6 +117,7 @@ impl VolumeFlipbookMaterial {
 	pub fn new(asset: &PackagedVolumeFlipbook, tint: Color, intensity: f32) -> Self {
 		let tint = LinearRgba::from(tint);
 		Self {
+			illumination: Vec4::ZERO,
 			frame_a: asset.frames[0].clone(),
 			frame_b: asset.frames[1].clone(),
 			local_to_texture: asset.manifest.local_to_texture(),
@@ -245,9 +259,11 @@ pub(crate) fn tick_volumes(
 			continue;
 		}
 		let Some(handle) = material else {
-			commands.entity(entity).try_insert(MeshMaterial3d(
-				materials.add(VolumeFlipbookMaterial::new(asset, part.tint, part.intensity)),
-			));
+			commands.entity(entity).try_insert(MeshMaterial3d(materials.add({
+				let mut m = VolumeFlipbookMaterial::new(asset, part.tint, part.intensity);
+				m.illumination = part.illumination;
+				m
+			})));
 			continue;
 		};
 		life.duration = asset.manifest.duration_seconds();

@@ -57,6 +57,12 @@ fn intersect_box(origin: vec3<f32>, direction: vec3<f32>) -> vec2<f32> {
     return vec2(enter, leave);
 }
 
+@group(constants::MATERIAL_BIND_GROUP) @binding(9) var<uniform> illumination: vec4<f32>;
+fn sample_density(uv: vec3<f32>) -> f32 {
+    if any(uv < vec3(0.0)) || any(uv > vec3(1.0)) { return 0.0; }
+    return mix(textureSampleLevel(frame_a, density_sampler, uv, 0.0).r,
+               textureSampleLevel(frame_b, density_sampler, uv, 0.0).r, settings.x);
+}
 @fragment
 fn fragment(input: VolumeVertex) -> @location(0) vec4<f32> {
     let ndc = frag_coord_to_ndc(input.position);
@@ -79,19 +85,31 @@ fn fragment(input: VolumeVertex) -> @location(0) vec4<f32> {
     let step_world = (interval.y - interval.x) / 96.0;
     let step_local = step_world * length(local_direction);
     var transmission = 1.0;
+    var lit_color = vec3(0.0);
     for (var i = 0u; i < 96u; i += 1u) {
         let uv = origin + direction * (interval.x + (f32(i) + 0.5) * step_world);
         let a = textureSampleLevel(frame_a, density_sampler, uv, 0.0).r;
         let b = textureSampleLevel(frame_b, density_sampler, uv, 0.0).r;
         let density = mix(a, b, settings.x);
         if density >= 0.0 && density <= 65504.0 {
+            let before = transmission;
             transmission *= exp(-density * settings.z * step_local);
+            // Optional artistic attenuation in authored local units, not scene lighting.
+            if illumination.w > 0.0 && density > 0.00001 {
+                let key = (local_to_texture * vec4(normalize(illumination.xyz), 0.0)).xyz;
+                let tau = sample_density(uv + key * 0.06) * 0.12
+                        + sample_density(uv + key * 0.18) * 0.24
+                        + sample_density(uv + key * 0.40) * 0.35;
+                let light = 0.28 + 0.90 * exp(-illumination.w * tau * settings.z);
+                lit_color += (before - transmission) * tint.rgb * light;
+            }
         }
         if transmission < 0.01 { break; }
     }
     let opacity = (1.0 - transmission) * settings.y * tint.a;
     if opacity < 0.00001 { discard; }
     var rgb = tint.rgb;
+    if illumination.w > 0.0 { rgb = lit_color / max(1.0 - transmission, 0.000001); }
     @if(!HDR)
     rgb = tone_mapping(vec4(rgb, 1.0), view.color_grading).rgb;
     return vec4(rgb, opacity);

@@ -1,0 +1,359 @@
+{
+  "reference_commit": "070e97eed4d94c8c06377c2286ce89895d38d696",
+  "seed": 13,
+  "method": "Native composed-field GPU readback, fixed-age snapshots; trilinear resample to common grid. Not Pyro.",
+  "commands": [
+    "python3 bin/vfx/run_reference_export.py --reference-checkout \"$REFERENCE\" --output target/surrealist-export/sequence",
+    "python3 bin/vfx/package_surrealist.py target/surrealist-export/sequence"
+  ],
+  "frame_count": 48,
+  "duration_s": 4.7,
+  "decoded_bytes": 100663296,
+  "disk_bytes": 100670592,
+  "tint": [
+    0.6499999761581421,
+    0.4399999976158142,
+    0.25
+  ],
+  "sha256": {
+    "frame_00.ktx2": "cc26a803811fee2bad17f90320fcd7d1e3f74c4599c5e9b7263ba5c848293634",
+    "frame_01.ktx2": "15ea976373924588ffe1c460e8b4bc6e8f62ef1e2da8d43769de21e8cb0649a5",
+    "frame_02.ktx2": "530e624c83c1caf5eb54df4b3e762e0896e41feda3c369c302fb8220785c7bbb",
+    "frame_03.ktx2": "ddbdf45707e7538805b33be54cb764c2e300d85461c7117e748760ee66850fdb",
+    "frame_04.ktx2": "139980feba4dd9c7fdb29026c4d37e73ac0b83d18c54e063427cb92a7e97b345",
+    "frame_05.ktx2": "1aebfd607727568deed179812c12e46b0f6312c49c78ea15901387eb09c97757",
+    "frame_06.ktx2": "ed910276ab4f07eb4f1451f27b9d8f80d86360692596f35eeff3e9ed198f3d91",
+    "frame_07.ktx2": "8e9a91d5ffc58487f84a4529d3ba706a360f48870a69948399aec191c5907fdd",
+    "frame_08.ktx2": "7487cc84e5002028a2435b583a2ae29886dfc01b9e8cdfd7ab1738429cd99ad1",
+    "frame_09.ktx2": "3870177de733e4e0965f03fbb3bc6e6ab9e0a907c4ce06c77824175b6ba5bf48",
+    "frame_10.ktx2": "29419bd7b47731051f4c0fcee52652dbd5ba737d8fc1a0c0c6bd809d0b816035",
+    "frame_11.ktx2": "079abd9ba154130b5ebb7a6c615b49c2c7bcf806f626560b269271b6f47bf53e",
+    "frame_12.ktx2": "ba02747284584b79c2f9120dd6b65def2e3e0ddf80d2534343051ee8fa8e9c65",
+    "frame_13.ktx2": "d61beee2c467eddb2fe8ac370c80c119ef7e003f00586c657991cfe5ef6162cf",
+    "frame_14.ktx2": "53d221029ee7b98a63c90115a591fe91f59d66bc7757726444adf903bd6e5723",
+    "frame_15.ktx2": "0ede98323a2774f9a24b7f96a3a6c56f590eb4060c0a9772d9122a990cda42f0",
+    "frame_16.ktx2": "08f6d61b39d6ac280c000032e4f59d128c00dece3be30972f6480f8f037603bc",
+    "frame_17.ktx2": "c73aafcc7185c0f7bbfbbd6f211832c2614c0e929137186a5a0483e2121d811b",
+    "frame_18.ktx2": "4f3d3cce4c626838efac39a9236d66d52459b1a5af5ec75077b204167c680e98",
+    "frame_19.ktx2": "3e4d963b2718d787d1bf5edef6d4ce395d23b9ae26bc8dd7e3716b22c4ce4758",
+    "frame_20.ktx2": "db821eba3a639a859150962dbfd8bf8c5198049791cea4719c7da0e3b3fa2ff5",
+    "frame_21.ktx2": "fa2d5a8e03784fc3f5a88c43f5573ff875630153a83ec0bd6408935f85948ebf",
+    "frame_22.ktx2": "d02bfb951a0bededa5e503b9d5d6577d5a946658f13dcbd2e51d1a168c042c13",
+    "frame_23.ktx2": "eb7ef10b359dd6100eea540d5df9ee0e7e3b74645867c2db62aab0052add1d4f",
+    "frame_24.ktx2": "270a4e41cb09929ddbebd67399c6c305e7a5cefb9e30501ca52045198234841c",
+    "frame_25.ktx2": "c675dbdaaa51634fa50a2ba310dc8fb5cdd4aeb43c907ece6842bbfd9e839ceb",
+    "frame_26.ktx2": "cd3b152cf994cb1f50cb14ea89f5eaad75fbc3fdbbc231f16609f77091786763",
+    "frame_27.ktx2": "905cfdc0f3b7e945fed2deecf9360a0bff73cb1cb28944ff2f433457b49f9320",
+    "frame_28.ktx2": "1e14fe34d7533af0b6d1eb5edb1da3f6805e0fa68b42df10d4239cd505cb6056",
+    "frame_29.ktx2": "4a7f246b2caf77503bbea139c7e5869e8f88bd7df714432cbb8f9181247d2177",
+    "frame_30.ktx2": "717527f436c90e38f13bfcc26e6d024315be69e35385fa8c0863820654937197",
+    "frame_31.ktx2": "c3b07f45a0b0051c6d666b80c46f0d071247c21a07e239f8afa9d8904e7444a4",
+    "frame_32.ktx2": "faabd44efb8a82a132e5a6a0a03df1628f61d7a62b03e7421a5013e9bb15da7c",
+    "frame_33.ktx2": "537d306202b4e555b50c67c39abf6de1f1510273b8a1d8014e68e6493aa63c51",
+    "frame_34.ktx2": "7aa562829e9767ecdfeb292cf3b264406b91edd08e98d4d40e980672f72f9b37",
+    "frame_35.ktx2": "edb785d9127491798b1cfaa6e2038d7708ef81e35638ade19ddeb9b2c010ba28",
+    "frame_36.ktx2": "8194220d37696dc8d790285cb1addda4626973a2605a309f0be84df4e8584cdd",
+    "frame_37.ktx2": "e789ecdf1f33a43ac97cd15080f94321d0ed1a87160a65d4c90f45c6bf98eae8",
+    "frame_38.ktx2": "65044d38a822b47822caf094df6150e6863739934b3f22516f46c70b34ad78bb",
+    "frame_39.ktx2": "5b9afa6dd4f81eff8fa418f1be2f27ee20ba89d17d148dcdae77c1ef88a2f0df",
+    "frame_40.ktx2": "9f0bc6c18a58d88469ee89bec0043b2758a32d8737cd661dc2bf59f9a37c4cf8",
+    "frame_41.ktx2": "95ac48efed8704fd96ce269033c72161b0d1d6a4eead11b658cb35f14c12061f",
+    "frame_42.ktx2": "889d04d2448477c5f7c9e971978ab19c73d45e97e617d526c6bc41c7479ec5d3",
+    "frame_43.ktx2": "889d04d2448477c5f7c9e971978ab19c73d45e97e617d526c6bc41c7479ec5d3",
+    "frame_44.ktx2": "889d04d2448477c5f7c9e971978ab19c73d45e97e617d526c6bc41c7479ec5d3",
+    "frame_45.ktx2": "889d04d2448477c5f7c9e971978ab19c73d45e97e617d526c6bc41c7479ec5d3",
+    "frame_46.ktx2": "889d04d2448477c5f7c9e971978ab19c73d45e97e617d526c6bc41c7479ec5d3",
+    "frame_47.ktx2": "cc26a803811fee2bad17f90320fcd7d1e3f74c4599c5e9b7263ba5c848293634"
+  },
+  "samples": [
+    {
+      "time": 0.0,
+      "mass": 0.0,
+      "maximum": 0.0
+    },
+    {
+      "time": 0.1,
+      "mass": 0.0075312864770956936,
+      "maximum": 0.9718446135520935
+    },
+    {
+      "time": 0.2,
+      "mass": 0.09458982815559029,
+      "maximum": 1.2497068643569946
+    },
+    {
+      "time": 0.3,
+      "mass": 0.38646044320685935,
+      "maximum": 1.4186726808547974
+    },
+    {
+      "time": 0.4,
+      "mass": 0.6849028751603837,
+      "maximum": 1.4817439317703247
+    },
+    {
+      "time": 0.5,
+      "mass": 0.8076605307265879,
+      "maximum": 1.499575138092041
+    },
+    {
+      "time": 0.6,
+      "mass": 0.8555221594382898,
+      "maximum": 1.5002055168151855
+    },
+    {
+      "time": 0.7,
+      "mass": 1.003310948264872,
+      "maximum": 1.5032122135162354
+    },
+    {
+      "time": 0.8,
+      "mass": 1.2117240336932062,
+      "maximum": 1.8113114833831787
+    },
+    {
+      "time": 0.9,
+      "mass": 1.3373654637673622,
+      "maximum": 1.855715036392212
+    },
+    {
+      "time": 1.0,
+      "mass": 1.4177660989828786,
+      "maximum": 1.8676049709320068
+    },
+    {
+      "time": 1.1,
+      "mass": 1.69647033412166,
+      "maximum": 1.8907132148742676
+    },
+    {
+      "time": 1.2,
+      "mass": 1.9814630434963467,
+      "maximum": 1.9798991680145264
+    },
+    {
+      "time": 1.3,
+      "mass": 2.0419702022464934,
+      "maximum": 2.071662425994873
+    },
+    {
+      "time": 1.4,
+      "mass": 1.974166339861893,
+      "maximum": 2.090240001678467
+    },
+    {
+      "time": 1.5,
+      "mass": 1.8976717731319717,
+      "maximum": 2.09745717048645
+    },
+    {
+      "time": 1.6,
+      "mass": 1.8301583108185884,
+      "maximum": 2.121516227722168
+    },
+    {
+      "time": 1.7,
+      "mass": 1.7961439969419009,
+      "maximum": 2.099609375
+    },
+    {
+      "time": 1.8,
+      "mass": 1.7933850623169634,
+      "maximum": 2.0992493629455566
+    },
+    {
+      "time": 1.9,
+      "mass": 1.8054927896404924,
+      "maximum": 2.09765625
+    },
+    {
+      "time": 2.0,
+      "mass": 1.817956283840937,
+      "maximum": 2.0979926586151123
+    },
+    {
+      "time": 2.1,
+      "mass": 1.8237247704954467,
+      "maximum": 2.091740369796753
+    },
+    {
+      "time": 2.2,
+      "mass": 1.8214014359773354,
+      "maximum": 2.086766004562378
+    },
+    {
+      "time": 2.3,
+      "mass": 1.8097747172588532,
+      "maximum": 2.0840609073638916
+    },
+    {
+      "time": 2.4,
+      "mass": 1.7959768293732297,
+      "maximum": 2.078097105026245
+    },
+    {
+      "time": 2.5,
+      "mass": 1.7843980641720427,
+      "maximum": 2.0598232746124268
+    },
+    {
+      "time": 2.6,
+      "mass": 1.7795374795852044,
+      "maximum": 2.0553369522094727
+    },
+    {
+      "time": 2.7,
+      "mass": 1.7777881138425389,
+      "maximum": 2.0248026847839355
+    },
+    {
+      "time": 2.8,
+      "mass": 1.782277527489643,
+      "maximum": 2.06398344039917
+    },
+    {
+      "time": 2.9,
+      "mass": 1.7878481723982171,
+      "maximum": 2.0671236515045166
+    },
+    {
+      "time": 3.0,
+      "mass": 1.7987881378117492,
+      "maximum": 2.0644702911376953
+    },
+    {
+      "time": 3.1,
+      "mass": 1.8081809995248381,
+      "maximum": 2.0810534954071045
+    },
+    {
+      "time": 3.2,
+      "mass": 1.8162073199433886,
+      "maximum": 2.0842607021331787
+    },
+    {
+      "time": 3.3,
+      "mass": 1.8215419478199124,
+      "maximum": 2.083893060684204
+    },
+    {
+      "time": 3.4,
+      "mass": 1.82319554047636,
+      "maximum": 2.0832228660583496
+    },
+    {
+      "time": 3.5,
+      "mass": 1.8262882744451507,
+      "maximum": 2.081627130508423
+    },
+    {
+      "time": 3.6,
+      "mass": 1.8258644617950899,
+      "maximum": 2.0799574851989746
+    },
+    {
+      "time": 3.7,
+      "mass": 1.8274193345011285,
+      "maximum": 2.0795891284942627
+    },
+    {
+      "time": 3.8,
+      "mass": 1.8286315672707398,
+      "maximum": 2.0797410011291504
+    },
+    {
+      "time": 3.9,
+      "mass": 1.8287797141705397,
+      "maximum": 2.080078125
+    },
+    {
+      "time": 4.0,
+      "mass": 1.828608260253954,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.1,
+      "mass": 1.828582140321349,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.2,
+      "mass": 1.8285799971473917,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.3,
+      "mass": 1.8285799971473917,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.4,
+      "mass": 1.8285799971473917,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.5,
+      "mass": 1.8285799971473917,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.6,
+      "mass": 1.8285799971473917,
+      "maximum": 2.0792055130004883
+    },
+    {
+      "time": 4.7,
+      "mass": 0.0,
+      "maximum": 0.0
+    }
+  ],
+  "grains": "28 sampled reference tracks, initial-state ballistic approximation; see recipe",
+  "source_readback_sha256": {
+    "01.rgba16": "fc087e781f6e1ecebc81f9dc4fc482022d70b16e8b8a262278a66a8b085dd9e0",
+    "02.rgba16": "4ac036cb05bd2e1ebed3a74cee6b8820e44a8303e4d236593b94c184b3610312",
+    "03.rgba16": "fb27bffd3acbe793ed423dc82a468fa8e99a70dfc44d4999a89749222a7b1387",
+    "04.rgba16": "e516d9ea7404b262cd99045ef19d8d787d9f53e3b214c1d98b523782a8240909",
+    "05.rgba16": "f029adc2f8b9fb4455a1e498078228f8eb691c186a2de730769d01f692c14045",
+    "06.rgba16": "9a31c6f27af6982bdad543cd40881ff937036cac04e36e98b32de81c79dad61e",
+    "07.rgba16": "269c319728d7a61dc708e3100a5bc8232053aa965d659e4dd86f47194bdf0207",
+    "08.rgba16": "26ba75813e15e5d15d16989b2ac050fc26bfc49ee02f39a0f82094e22a7d3270",
+    "09.rgba16": "40ca9dbd747d11eeb6cfd458bec948dfa4935a9c119b1d0c712e0f4ff0192064",
+    "10.rgba16": "7409f8449d87c1b55273256e030e504fd29e55418a3be69499eb584fc8389354",
+    "11.rgba16": "378dde8606afdf1742ea0a6452f2ebcaf32965c04816f029ff60f2144c7593b8",
+    "12.rgba16": "499b6e447d8109b7266355c54e089fc223a1b96be97a5b556d1a87043280cdd0",
+    "13.rgba16": "08253a5a5f5e7f25b8c4a80be7566bf970d9951491ba864092101ba25357d3b0",
+    "14.rgba16": "d73ca48b42b839eb6d09b70de837880dfb90d354437df16eea79da4e146afbb5",
+    "15.rgba16": "bd1c2173fb3f60d72f88d1bd22ef4a97ad832d12383e7fb81ccf18d2ef32ab36",
+    "16.rgba16": "06fe54f96d250c2b030674033b63504674f39e25422a39bfb1a3b66cc685df36",
+    "17.rgba16": "fc3f2500064291328d359d1db237596bd5754fb8ca30d8d7bf13d7377700da8c",
+    "18.rgba16": "a4eb01946d87247672b7b6290229d18a996eb440d09ef575fff75b8313d05374",
+    "19.rgba16": "783237680d194348c1d150606a7fb9303efacd0758d06658ea5217cc6661f0f5",
+    "20.rgba16": "75f071031cd8e2723628ac46d4ab458fb6b6fe233f246f2ad898dbf2161d9ed6",
+    "21.rgba16": "7591a5b339ddfd0c04331d0a81d44db1ecfa890e9f40861bbc8c3665c08878b4",
+    "22.rgba16": "059e9c1027a18ccb767474f910d13175eb3a07b9e29573cc67dcd463f34f1980",
+    "23.rgba16": "c5ee5e2da7b27157cab235a591f6f009eb43ac6b4c34c9046755ca1e4b8cbc84",
+    "24.rgba16": "36e3db91a796a38312c220073102389b632a5b2004518e8e008fa30e3f9822be",
+    "25.rgba16": "970cf41566d1871958516d8e2bb91af74e3e3793f914cd927600d8c02040caf4",
+    "26.rgba16": "5769a1c9fd9e31dca895bc984d3d0858a302bd6dc9a4222214a100ae18b4ebc7",
+    "27.rgba16": "80afeb774343142246274261d7171c09a32998d626b7d23000980fbf50ae01ec",
+    "28.rgba16": "2b350089e8cbec29e523d02d4c41cde6cfbc88b8694e1cf90b030196f3c86232",
+    "29.rgba16": "dd81abed27f05fa37cd8d61251a0f06a642c5929c8bf7f85491d0f9f456fbf3c",
+    "30.rgba16": "48c784ce721b2f5ce01d507bc99e115cadebc8124469b9066bcdd318b07532fd",
+    "31.rgba16": "b25c740df8bd4be634ecbc3bcc81fd54b2ed1a1a883b3ec2465604d27a3a631c",
+    "32.rgba16": "1199a759fa60c7d79d3a0071250724c61e77971061512aa97ab900d8645c8817",
+    "33.rgba16": "43fa50c811eb4d75896596210373e51954187641670dea5f2c92f91fa59b48a4",
+    "34.rgba16": "07bafe9b06510adcb03cef56a85a024a99c318a97b60837e0abdf50588b44d7f",
+    "35.rgba16": "579dc4086689ed5069f4b04d2ee43ecdae30b69903fab3597b5cf8fa916cbff4",
+    "36.rgba16": "8fbc565fd22ca7b3d6eef1a80615ed359a5cf0125205d7a0a72defb62a0f76fc",
+    "37.rgba16": "4a17760a60bb41f3b8b3280e551ad46efa79a1d580b57b8c3678297fc2e31875",
+    "38.rgba16": "41c9b7ac8a9c98a2dddfd513c1b35afa6e0d3fc8b610ee6204690570324d030c",
+    "39.rgba16": "f7eb551bd46dd96d5667b1ebafea2326c236cdf5fee800e889eec62597e1119b",
+    "40.rgba16": "f85513d5a88d00f9f8564006bc139d0377b3a2ca372d7f941bb1f10fcbc7c5fd",
+    "41.rgba16": "4b4182ccc0664d17ad8eeb8ca30253092c6dd7b6cfe2167143ab9105bd3f92be",
+    "42.rgba16": "f2f5ad7c79cca419b0d7abb02f84ac52e2397df03e8250aadb78b020ba6aef1e",
+    "43.rgba16": "f2f5ad7c79cca419b0d7abb02f84ac52e2397df03e8250aadb78b020ba6aef1e",
+    "44.rgba16": "f2f5ad7c79cca419b0d7abb02f84ac52e2397df03e8250aadb78b020ba6aef1e",
+    "45.rgba16": "f2f5ad7c79cca419b0d7abb02f84ac52e2397df03e8250aadb78b020ba6aef1e",
+    "46.rgba16": "f2f5ad7c79cca419b0d7abb02f84ac52e2397df03e8250aadb78b020ba6aef1e"
+  }
+}

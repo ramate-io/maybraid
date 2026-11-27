@@ -32,7 +32,11 @@ reinterpreted as density time samples.
 `VfxSpawn::playback` changes time; intensity multiplies extinction; tint supplies
 linear RGB and final alpha. Scalar density is otherwise neutral white. Seed remains
 on the instance for recipe composition but does not alter baked voxel data. Palette
-is available to other parts in the recipe; this unlit density renderer uses tint.
+is available to other parts in the recipe; the default unlit density renderer uses
+tint. Per-part `tint` multiplies the instance tint. Optional `illumination = Vec4(direction, contrast)` enables three
+short directional density probes in authored local space; contrast zero preserves
+the original unlit path. This is an artistic contrast approximation, not scene
+lighting or physical scattering.
 
 ## Export contract
 
@@ -96,8 +100,9 @@ step, with early termination at 99% accumulated opacity. Step lengths are measur
 in authored local units: uniformly enlarging an effect preserves its optical
 thickness. There is no stochastic jitter, so a fixed time has stable output.
 
-This first renderer is unlit tinted extinction with alpha compositing. It has no
-self-shadowing, scene-light scattering, collision response, or fluid simulation.
+The default renderer is unlit tinted extinction with alpha compositing. Optional
+directional density probes provide approximate local attenuation; there is no
+scene-light scattering, collision response, or fluid simulation.
 Transparent objects and overlapping volumes use ordinary object-level transparency
 sorting, not globally interleaved ray integration. Thin features can be undersampled
 at the fixed step budget. Large on-screen volumes remain expensive even with tiny
