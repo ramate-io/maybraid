@@ -61,6 +61,9 @@ impl Plugin for VfxPlaygroundPlugin {
 					ui::sync_command_status_text.before(game_commands::ui::update_debug_ui),
 				),
 			);
+		let recipe =
+			maybraid_vfx::effects::surrealist_dust::SurrealistDust::compile(app.world_mut());
+		app.register_vfx_preview("surrealist-dust", move || recipe.clone());
 	}
 }
 

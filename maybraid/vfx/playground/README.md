@@ -104,3 +104,57 @@ volume, and `view 2.4 1.6 3.2` to restore the default viewpoint. These commands 
 automatic orbit. `screenshot /tmp/volume.png` captures through the renderer.
 Volume layers participate in the existing selection, playback, reload, and failure
 workflows; the inspector also reports their interpolated frame pair and decoded size.
+
+## SurrealistDust
+
+```sh
+cargo run --locked -p vfx-playground -- show surrealist-dust --seed 13
+```
+
+`effects::surrealist_dust::SurrealistDust` combines a 4.7-second animated density
+clip with 28 sparse grain tracks. Compile its shared grain assets once using
+`SurrealistDust::compile(&mut World)`, retain the recipe, and clone it when spawning
+through `Effect::new(recipe)`. Root ECS `Transform` controls placement. Add
+`DepthPrepass` to the viewing camera for opaque-scene occlusion.
+
+Use `noloop` for one playback. Normal camera, pause, reset, selection and cancellation
+controls apply. `view 0.8 0.6 0.6` moves inside the volume.
+
+The clip contains 48 R16Float frames at 128×64×128 and 10 samples per second,
+occupying 96 MiB decoded and about 101 MB on disk. Images are shared across
+instances; clocks and materials are independent. Seed 13 is baked. The recipe
+uses sand tint and optional directional density probes for contrast.
+
+This integration demo uses spatial/time interpolation, simplified ballistic grains,
+object-level transparency sorting and a 0.1-second terminal fade.
+
+### Offline export
+
+Use a reference checkout at `070e97eed4d94c8c06377c2286ce89895d38d696` with its
+pinned Rust toolchain and a working native GPU/window environment. NumPy is needed
+only by the offline packaging and validation tools.
+
+```sh
+REFERENCE="/path/to/reference checkout"
+python3 bin/vfx/run_reference_export.py --reference-checkout "$REFERENCE" --output target/surrealist-export/sequence
+python3 bin/vfx/run_reference_export.py --reference-checkout "$REFERENCE" --compare --output target/surrealist-export/comparison
+python3 -m venv target/surrealist-export/env
+target/surrealist-export/env/bin/pip install numpy==2.0.2
+target/surrealist-export/env/bin/python bin/vfx/package_surrealist.py target/surrealist-export/sequence --output-dir target/surrealist-export/assets --grain-output target/surrealist-export/grains.rs
+target/surrealist-export/env/bin/python bin/vfx/check_surrealist.py --assets-dir target/surrealist-export/assets --readbacks target/surrealist-export/sequence --comparison-readbacks target/surrealist-export/comparison --report target/surrealist-export/validation.json
+rustfmt --edition 2024 --config-path rustfmt.toml target/surrealist-export/grains.rs
+```
+
+The wrapper validates the reference commit and resolves artifacts from Cargo build
+output. `--validate-only` checks reference identity; `--target-dir PATH` overrides
+the build directory. The reader samples the composed GPU density field. Packaging
+resamples it onto a common grid and writes relative frame paths and source hashes.
+
+Native capture and instance-cleanup examples accept an output directory:
+
+```sh
+cargo run --locked -p vfx-playground --example surrealist_probe -- /tmp/surrealist-views
+cargo run --locked -p vfx-playground --example surrealist_instances -- /tmp/surrealist-instances
+```
+
+The examples use inspection clocks and provide no performance benchmark.

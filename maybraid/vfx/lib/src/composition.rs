@@ -140,11 +140,14 @@ impl FlipbookPart {
 /// Deferred animated volume identity; renderer resources are supplied at realization.
 #[derive(Clone, Debug)]
 pub struct VolumeFlipbookPart {
+	pub tint: Color,
+	/// Local directional density probes; w=0 preserves unlit rendering.
+	pub illumination: Vec4,
 	pub flipbook: crate::VolumeFlipbookRef,
 }
 impl VolumeFlipbookPart {
 	pub fn new(flipbook: impl Into<crate::VolumeFlipbookRef>) -> Self {
-		Self { flipbook: flipbook.into() }
+		Self { flipbook: flipbook.into(), tint: Color::WHITE, illumination: Vec4::ZERO }
 	}
 }
 
